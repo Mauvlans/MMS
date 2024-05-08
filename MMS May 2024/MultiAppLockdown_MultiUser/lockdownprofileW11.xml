@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AssignedAccessConfiguration xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://schemas.microsoft.com/AssignedAccess/2017/config" xmlns:default="http://schemas.microsoft.com/AssignedAccess/2017/config" xmlns:rs5="http://schemas.microsoft.com/AssignedAccess/201810/config" xmlns:v3="http://schemas.microsoft.com/AssignedAccess/2020/config" xmlns:v5="http://schemas.microsoft.com/AssignedAccess/2022/config">
+  <Profiles>
+    <Profile Id="{9A2A490F-10F6-4764-974A-43B19E722C23}">
+      <AllAppsList>
+        <AllowedApps>
+          <App AppUserModelId="Microsoft.OutlookForWindows_8wekyb3d8bbwe!Microsoft.OutlookforWindows" />
+          <App AppUserModelId="Microsoft.WindowsTerminal_8wekyb3d8bbwe!App" />
+          <App AppUserModelId="Microsoft.GamingApp_8wekyb3d8bbwe!Microsoft.Xbox.App" />
+          <App AppUserModelId="Microsoft.BingWeather_8wekyb3d8bbwe!App" />
+          <App AppUserModelId="Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic" />
+          <App DesktopAppPath="%windir%\system32\WindowsPowerShell\v1.0\powershell.exe" />
+          <App DesktopAppPath="%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" />
+        </AllowedApps>
+      </AllAppsList>
+      <rs5:FileExplorerNamespaceRestrictions>
+        <rs5:AllowedNamespace Name="Downloads" />
+        <v3:AllowRemovableDrives />
+      </rs5:FileExplorerNamespaceRestrictions>
+      <v5:StartPins><![CDATA[{
+                    "pinnedList":[
+                        {"packagedAppId":"windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel"},
+                        {"packagedAppId":"Microsoft.OutlookForWindows_8wekyb3d8bbwe!Microsoft.OutlookforWindows"},
+                        {"packagedAppId":"Microsoft.WindowsTerminal_8wekyb3d8bbwe!App"},
+                        {"packagedAppId":"Microsoft.GamingApp_8wekyb3d8bbwe!Microsoft.Xbox.App"},
+                        {"packagedAppId":"Microsoft.BingWeather_8wekyb3d8bbwe!App"},
+                        {"packagedAppId":"MicrosoftWindows.Client.CBS_cw5n1h2txyewy!WindowsBackup"},
+                        {"desktopAppLink":"%ALLUSERSPROFILE%\\Microsoft\\Windows\\Start Menu\\Programs\\Microsoft Edge.lnk"},
+                        {"desktopAppLink":"%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\File Explorer.lnk"}
+                    ]
+                }]]></v5:StartPins>
+      <Taskbar ShowTaskbar="true" />
+    </Profile>
+  </Profiles>
+  <Configs>
+    <v3:GlobalProfile Id="{9A2A490F-10F6-4764-974A-43B19E722C23}"/>
+  </Configs>
+</AssignedAccessConfiguration>
