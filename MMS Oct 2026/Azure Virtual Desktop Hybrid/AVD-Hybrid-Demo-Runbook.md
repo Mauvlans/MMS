@@ -26,7 +26,7 @@ Everything below assumes one lab subscription with a **host pool that has no ses
 - [ ] `Az.DesktopVirtualization` and `Az.ConnectedMachine` PowerShell modules installed on the demo machine, or Cloud Shell ready.
 - [ ] `azcmagent` downloaded and tested on each demo machine (`azcmagent show`, `azcmagent check`).
 - [ ] AD DS domain controller reachable from every demo machine, **or** confirm Windows 11 machines can go Microsoft Entra ID-only if you want to show that path (Windows Server cannot).
-- [ ] An **FSLogix SMB share** already built and permissioned, with a test profile on it for demo 5.
+- [ ] **Local profiles** on each demo host for this session; do not depend on an FSLogix SMB share or claim profiles roam between hosts. Existing VHDX files are preserved outside the demo path for rollback.
 - [ ] **Microsoft.DesktopVirtualization** resource provider registered on the subscription.
 - [ ] **Desktop Virtualization Contributor** on you (or whoever drives the portal), and **User Access Administrator** if you'll assign users live.
 - [ ] Two endpoint checklists open in tabs: the [AVD required URLs](https://learn.microsoft.com/en-us/azure/virtual-desktop/required-fqdn-endpoint) list and the [Azure Arc network endpoints](https://learn.microsoft.com/en-us/azure/azure-arc/network-requirements-consolidated) list — these are **not the same list**, and mixing them up is the most common day-one failure.
@@ -146,22 +146,18 @@ Get-AzWvdSessionHost -ResourceGroupName $rg -HostPoolName $hostPool
 
 ---
 
-## Demo 5 — Shortpath, profiles, and the user experience (~9 min, after slide "Demo 5")
+## Demo 5 — Shortpath and the user experience (~9 min, after slide "Demo 5")
 
-**Point to make:** once a session host is Available, the user experience is identical to any other AVD desktop — that consistency is the whole pitch.
+**Point to make:** AVD still brokers a desktop on an Arc-enabled machine. This lab uses **local profiles**; profile roaming is deliberately outside the demo.
 
-1. Connect to the pre-staged, already-**Available** host from **Windows App**.
-2. Open the connection information flyout in the client and point out **RDP Shortpath** negotiated over UDP — call out that this works the same way it does for a cloud-hosted session host, direct across the LAN.
-3. Show FSLogix doing its job: open the profile container path on the SMB share, then check the event log from inside the session:
-   ```powershell
-   Get-WinEvent -LogName 'Microsoft-FSLogix-Apps/Operational' -MaxEvents 20 |
-       Select-Object TimeCreated, Id, Message
-   ```
-4. Sign out, sign back in, and narrate the fast reconnect against the same profile container.
+1. Connect to the pre-staged, already-**Available** host from **Windows App**. A live user connection is the proof; the portal status alone is not.
+2. Open the connection information flyout in the client and point out **RDP Shortpath** negotiated over UDP — call out that this works the same way it does for a cloud-hosted session host, direct across the LAN. If it negotiated TCP instead, show that honestly rather than claiming UDP.
+3. Open `powershell.exe` in the session and run `hostname` and `whoami` to show the Arc-enabled host and the signed-in demo user. No network profile container is involved.
+4. Disconnect and reconnect to the **same** Ready desktop to show the broker returns to that host and session. Do not narrate profile roaming across hosts; local desktop settings are scoped to that machine.
 5. **Optional stretch demo:** block UDP 3390 at the host's firewall, reconnect, and show Shortpath fail to negotiate and fall back to RDP over TCP — a good "what does it look like when it's broken" moment if time allows.
 6. Circle back to `hybrid-demo-01` from demo 3 — by now its registration should have finished. Refresh the **Session hosts** blade one more time and show it landed on its own, no extra clicks.
 
-**Talk track:** the entire value proposition of Hybrid is that everything *above* the session host — brokering, the client, FSLogix, Shortpath — behaves exactly like Azure-hosted AVD. Everything *below* it — the machine, the hypervisor, the image — is entirely yours.
+**Talk track:** Hybrid keeps brokering, Windows App, and supported transport features in Azure; the machine, hypervisor, image, and profile strategy remain yours. This demo intentionally chooses local profiles, not FSLogix, so don't promise cross-host profile continuity.
 
 ---
 
