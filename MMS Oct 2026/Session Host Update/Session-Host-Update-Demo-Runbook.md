@@ -7,35 +7,38 @@ Presenters: Adam Nichols, Chris Cavazos · 5 demos · ~44 minutes of demo time i
 
 ## 0. Lab build (do this before you travel)
 
-Everything below assumes one lab subscription with **two pooled host pools**, both created **with a session host configuration**:
+Everything below assumes one lab subscription with **three independent live pooled host pools**, each created **with a session host configuration**. The diagnostic/failure pool can be an existing fourth pool with suitable history; do not break a live demo pool to manufacture a failure.
 
 | Pool | Purpose | Hosts | Notes |
 |---|---|---|---|
-| `hp-mms-demo` | Live demos 1, 2, 4 | 6 | Small VM size (e.g. D2as_v5), Standard SSD, so updates are fast and cheap |
-| `hp-mms-scratch` | Demo 3 (PowerShell) and failure demo | 3 | Safe to break; used for the "what happens when it fails" story |
-| `hp-mms-history` | Demo 5 (diagnostics) | n/a | Any pool that already has several completed and one *failed* update in its Log Analytics history |
+| `hp-mms-demo` | Demos 1 and 4 (same running update) | 6 | Small VM size (e.g. D2as_v5), Standard SSD; do not schedule another update here before demo 4 |
+| `hp-mms-change` | Demo 2 (portal image/size/disk change) | 2 | Starts on gallery image `1.0.0`, D2as_v5, Standard SSD; `1.1.0` is published and available |
+| `hp-mms-cli` | Demo 3 (PowerShell update) | 2 | Starts on D2as_v5 and Standard SSD, with no update already scheduled or running |
+| `hp-mms-history` | Demo 5 and optional staged failure/retry | as needed | Existing, separate pool with completed and failed update records within Log Analytics retention; never put its failed state on a live-update pool |
 
 **Required in the lab before the session**
 
-- [ ] Both pools are **pooled** and show **Manage session host configuration** on the Session hosts blade. A pool without a session host configuration cannot use session host update.
+- [ ] All three live pools are **pooled** and show **Manage session host configuration** on the Session hosts blade. A pool without a session host configuration cannot use session host update.
 - [ ] All session hosts of a pool are in the **same Azure region and resource group**.
 - [ ] **Azure Compute Gallery** with at least **two image versions** published (e.g. `1.0.0` and `1.1.0`) and **two replicas** each — the version swap is the heart of demo 2.
 - [ ] Gallery lives in the **same subscription** as the host pool (cross-subscription gallery images are not supported).
 - [ ] Image is **generation 2** if you plan to demo Trusted launch.
 - [ ] **Key Vault** holding four secrets: domain-join username/password and local-admin username/password. If the vault uses private network access, attach a **managed identity** to the host pool; otherwise the vault must allow public access from all networks.
 - [ ] **Diagnostic settings** on every demo host pool sending to a Log Analytics workspace, with at least the categories **Checkpoint**, **Error**, and **Session Host Management Activity Logs** enabled. Without the third category, the `WVDSessionHostManagement` table never appears.
-- [ ] **Scaling plan disabled** on `hp-mms-demo` and `hp-mms-scratch`. An enabled scaling plan during an update can fail it with a runtime error.
+- [ ] **Scaling plan disabled** on all live-update pools until their updates finish. An enabled scaling plan during an update can fail it with a runtime error.
 - [ ] **Resource locks removed** from the hosts and their resource group.
-- [ ] **vCPU quota** headroom for one full batch of extra VMs — new hosts are created before the old ones are deleted.
-- [ ] `Az.DesktopVirtualization` **5.3.0 or later** (preview) installed on the demo machine, or Cloud Shell ready. Session host configuration cmdlets are in preview.
-- [ ] A **user account with an active session** on one host in `hp-mms-demo` so the sign-out notification is real, not described.
-- [ ] Azure Cloud Shell, Log Analytics blade, and the two host-pool blades open in **pre-loaded browser tabs**.
+- [ ] **vCPU quota** headroom for the peak concurrent replacement VMs across *all* updates running in parallel; verify quota in the demo region for both VM sizes. Replacements are created before originals are deleted.
+- [ ] On the **actual stage machine or Cloud Shell**, install a **preview** `Az.DesktopVirtualization` release with these cmdlets (a stable version number ≥5.3.0 is not sufficient). Run `Get-Command Update-AzWvdSessionHostConfiguration -Syntax` and confirm `-ManagedDiskType` against the loaded version. Rehearse demo 3 with that exact version.
+- [ ] A test user has an active session on the host that will be selected first in `hp-mms-demo`; verify the notification appears in a rehearsal (selection is name-based, not guaranteed by merely signing in anywhere).
+- [ ] Azure Cloud Shell, Log Analytics blade, and **all three** live host-pool blades open in pre-loaded browser tabs.
 - [ ] **Zoom It** installed and tested — MMS audiences will ask for it.
-- [ ] Screen recordings of a complete update (start → initial host → batch → complete) as a **fallback if the lab or venue Wi-Fi fails**.
+- [ ] Screen recordings for **each stage-dependent beat**: sign-out notification, portal config change/version warning, PowerShell success, pause/resume, failed/retry state, and both Kusto result sets. Store offline on the presentation laptop and play every clip once without network access.
+- [ ] Open the actual `hp-mms-history` workspace and run both queries below: Query A returns a completed update, Query B returns a real failure/error row within retention. If either is empty, use a verified recording instead of claiming live diagnostics.
+- [ ] Run a full timed dress rehearsal in the exact demo order and record the subscription ID, pool IDs, module version, query row counts, clip paths, and the time each update reaches initial/batch/terminal status. **Do not mark ready until all five demos and their offline fallbacks pass.**
 
-**Timing reality check.** A session host takes roughly **20 minutes** to update. Nothing you start on stage finishes on stage. Start the demo-1 update early and come back to it in demo 4 — that is the whole reason demo 4 sits later in the deck.
+**Timing reality check.** A session host takes roughly **20 minutes** to update. For six hosts at batch size two, budget about **80 minutes** (one initial ~20 minutes, then three ~20-minute waves); two hosts take about **40 minutes**. These are estimates, not guarantees. After demos 1–3 (~26 minutes of demo time, plus slide time), demo 4 might find the initial host done, but its next batch can still be in flight. Pause waits for in-flight work to complete; the portal's ~20-second status refresh is **not** the pause completion time. Use the recording as the *primary* way to show a completed pause/resume and end-to-end update, with the live lab as a bonus.
 
-**Cost/blast-radius note.** Every demo destroys and recreates VMs. Keep the pools small, and set `UpdateDeleteOriginalVM = $true` so the old VMs do not linger on the bill.
+**Cost/blast-radius note.** Each *executed update* replaces VMs; a view-only walkthrough does not. Keep the pools small, and set `UpdateDeleteOriginalVM = $true` so the old VMs do not linger on the bill. Run only in session-owned lab pools, never an existing production or other-session pool.
 
 ---
 
@@ -53,13 +56,13 @@ Everything below assumes one lab subscription with **two pooled host pools**, bo
 8. **Notifications tab.** Set **Minutes before the users are signed out** to `5` (0–60 is the supported range) and type a real message, e.g. *"We're updating your desktop. Please save your work, sign out, and sign straight back in."*
 9. **Review tab.** Wait for validation to pass, read the summary aloud, select **Update**.
 10. Return to **Session hosts** and show the **blue status banner**. Select **Refresh** — point out it is a point-in-time view, and that progress only moves when a whole host completes (0.00% for the first ~20 minutes is expected, not broken).
-11. Switch to the signed-in user's session and show the **sign-out notification** they actually received.
+11. Switch to the signed-in user's session and show the **sign-out notification** if it has arrived; otherwise play the pre-recorded notification clip. Do not wait on stage for name-based selection or the grace timer.
 
 **Leave this update running.** You come back to it in demo 4.
 
 **Talk track while it starts:** hosts are picked by name up to the batch size → users are notified → grace period → drain mode → removed from the pool → new VMs created as `SessionHostName-DateTime` → extensions rejoin the directory and register the host → drain mode off → original VMs deleted.
 
-**Failure mode on stage:** if validation fails, it is almost always a resource lock, a missing Key Vault secret, or a scaling plan still enabled. Say so and move to the recording.
+**Failure mode on stage:** if validation fails, read the actual error (possible causes include a resource lock, missing Key Vault access, or an enabled scaling plan), then move to the recording; do not diagnose from the symptom alone.
 
 ---
 
@@ -67,7 +70,7 @@ Everything below assumes one lab subscription with **two pooled host pools**, bo
 
 **Point to make:** these are properties of the *configuration*, so a change is always pool-wide and always versioned.
 
-1. On `hp-mms-scratch` → **Session hosts** → **Manage session host configuration** → **Edit**.
+1. On `hp-mms-change` → **Session hosts** → **Manage session host configuration** → **Edit**. Confirm no update is already scheduled or running on this pool.
 2. **Image.** Select **See all images** → your Azure Compute Gallery → move from version `1.0.0` to `1.1.0`. Call out the rules while the picker is open:
    - Marketplace, Compute Gallery, or managed image.
    - Must be supported for AVD and match the VM generation.
@@ -78,9 +81,9 @@ Everything below assumes one lab subscription with **two pooled host pools**, bo
 4. **OS disk type.** Switch Standard SSD → **Premium SSD**. Two things to say: Premium is the production recommendation, and the **OS disk size cannot be changed here** — it follows the gallery image definition. The new disk is named `SessionHostName-DateTime_Hash`.
 5. **Security type.** Open the dropdown and *narrate without changing it* (unless your image is gen 2 and you want the full demo): Trusted launch auto-selects secure boot and vTPM; Confidential VMs add integrity monitoring and you cannot opt out of vTPM.
 6. **Domain to join.** Show the Key Vault pickers for the domain-join account and the optional OU path. Say the constraint plainly: **you cannot change the directory during an update.**
-7. **Custom configuration.** Paste your script URL. This is the escape hatch for deploy-time customization — keep the script fast, idempotent and logging to a share.
+7. **Custom configuration.** Show the script URL field but **leave it unchanged** unless a pre-tested, reachable, idempotent script URL is already staged. Never paste an unverified URL into a live update.
 8. Continue through **Schedule** → **Notifications** → **Review** and select **Update**.
-9. Back on **Session hosts**, show the configuration **version has incremented** and every host now shows a **warning icon on Current Version** because it is behind **Target Version**.
+9. Back on **Session hosts**, show the new **timestamped target version** and warning icon on any host whose Current Version is behind Target Version. Do not promise every icon remains visible once replacement starts.
 
 **Callout for the room:** everything a person hand-applied to a host — files, registry keys, certificates — is gone after this. Put it in the image, in Intune/GPO, or in the custom configuration script.
 
@@ -90,26 +93,41 @@ Everything below assumes one lab subscription with **two pooled host pools**, bo
 
 **Point to make:** everything in the portal is automatable, and this is how it goes in your pipeline.
 
-Open Cloud Shell (PowerShell) or a local session with `Az.DesktopVirtualization` 5.3.0+.
+Open Cloud Shell (PowerShell) or a local session with a **preview** `Az.DesktopVirtualization` build that exposes the commands below. This example was checked against `6.0.1-preview`; the stable `6.0.0` installed on the review machine **does not expose them**. On the stage machine, install/verify explicitly (installation is preparation, not an on-stage step):
 
 ```powershell
-$rg   = 'rg-mms-avd'
-$pool = 'hp-mms-scratch'
+Install-Module Az.DesktopVirtualization -RequiredVersion '6.0.1-preview' -AllowPrerelease -Scope CurrentUser -Force
+Import-Module Az.DesktopVirtualization
+Get-Module Az.DesktopVirtualization | Select-Object Name, Version, @{Name='Prerelease';Expression={$_.PrivateData.PSData.Prerelease}}
+Get-Command Update-AzWvdSessionHostConfiguration -Syntax
+```
+
+Stop if the loaded version is not `6.0.1-preview` or `-ManagedDiskType` is absent. Set/verify the intended subscription with `Get-AzContext` before any write; replace the resource group below with the **read-back value of the `hp-mms-cli` pool**, not a guessed placeholder.
+
+```powershell
+$rg   = '<verified-resource-group>'
+$pool = 'hp-mms-cli'
+
+# Preflight: refuse to write to an unintended subscription or pool.
+$expectedSubscriptionId = '<verified-demo-subscription-id>'
+if ((Get-AzContext).Subscription.Id -ne $expectedSubscriptionId) { throw 'Wrong Azure subscription' }
+$target = Get-AzWvdHostPool -ResourceGroupName $rg -Name $pool -ErrorAction Stop
+if ($target.Name -ne $pool) { throw 'Wrong host pool' }
 
 # 1. Read the current configuration
 Get-AzWvdSessionHostConfiguration -ResourceGroupName $rg -HostPoolName $pool |
-    Format-List Version, ImageInfo*, VMSizeId, DiskType, DomainInfo*
+    Format-List Version, ImageInfo*, VMSizeId, ManagedDiskType, DomainInfo*
 
 # 2. Change only what you need — every parameter you omit is left alone
 Update-AzWvdSessionHostConfiguration `
     -ResourceGroupName $rg `
     -HostPoolName      $pool `
     -VMSizeId          'Standard_D4as_v5' `
-    -DiskType          'Premium_LRS'
+    -ManagedDiskType   'Premium_LRS'
 
 # 3. Confirm the change landed and a new version was stamped
 Get-AzWvdSessionHostConfiguration -ResourceGroupName $rg -HostPoolName $pool |
-    Format-List Version, VMSizeId, DiskType
+    Format-List Version, VMSizeId, ManagedDiskType
 
 # 4. Optional: set the defaults the update will run with
 Update-AzWvdSessionHostManagement `
@@ -130,14 +148,14 @@ Invoke-AzWvdInitiateSessionHostUpdate -ResourceGroupName $rg -HostPoolName $pool
 Get-AzWvdSessionHostManagementsUpdateStatus -ResourceGroupName $rg -HostPoolName $pool
 ```
 
-**Say these three things while the cmdlets run**
+**Say these things while the cmdlets run**
 
-- These cmdlets are **preview** and need **Az.DesktopVirtualization 5.3.0 or later**.
+- These cmdlets are **preview**; pin and rehearse the same preview version used here. Stable `6.0.0` is not a substitute.
 - `-UpdateDeleteOriginalVM $true` is the recommended setting — otherwise you own the cleanup of the old VMs.
 - Time zone values come from `Get-TimeZone`, using the **StandardName** property.
 - **Once an update is scheduled you cannot edit it.** To change anything, cancel it and schedule a new one.
 
-**Tip:** verify exact parameter names against your installed module version before the session (`Get-Help Update-AzWvdSessionHostManagement -Full`) — preview cmdlets move.
+**Tip:** `-DiskType` is not a parameter on `Update-AzWvdSessionHostConfiguration` in `6.0.1-preview`; the loaded cmdlet exposes `-ManagedDiskType`. If the stage module differs, stop and validate its actual syntax and return properties before presenting this sample.
 
 ---
 
@@ -145,12 +163,12 @@ Get-AzWvdSessionHostManagementsUpdateStatus -ResourceGroupName $rg -HostPoolName
 
 **Point to make:** you are never locked in mid-update, but cancel has a real cost.
 
-1. Return to `hp-mms-demo` → **Session hosts**. The update from demo 1 should now be past the initial host.
+1. Return to `hp-mms-demo` → **Session hosts**. Check whether the update from demo 1 is past the initial host; do not promise this by the demo-4 slot.
 2. Show the **blue banner**, select **Refresh** and read the progress. Point at the host list: replaced hosts carry the `SessionHostName-DateTime` naming on their Azure resources while the **OS host name is unchanged**.
-3. Select **Manage session host update** → **Pause**. Refresh after ~20 seconds — the status takes about that long to settle. Explain that pause lets the **batch in flight finish** first.
-4. Select **Resume** and show it continuing from where it stopped. Mention: an update left paused for **two weeks is cancelled automatically**.
+3. If an update is actively running and time permits, select **Manage session host update** → **Pause**. The banner may refresh after ~20 seconds, but the pause **does not complete until the batch in flight finishes**. Use the pre-recorded pause result if the batch is still running.
+4. **Only after status reads Paused**, select **Resume** and show it continuing; otherwise play the recorded resume result. Mention: an update left paused for **two weeks is cancelled automatically**.
 5. Show the **Cancel** and **Retry** buttons without pressing Cancel on the good pool. Give the warning verbatim: a cancelled update **cannot be resumed**, and a pool cancelled mid-flight can end up with **mixed OS versions or mixed domains** — schedule a replacement update immediately.
-6. Switch to `hp-mms-scratch` and show a **cancelled or failed** update if you staged one, including the **Retry** path. Note that a host pool with a failed update **cannot be deleted until the update is cancelled**.
+6. Switch to the separate `hp-mms-history` pool and show its **failed** update and **Retry** path only if that state was pre-staged and is safe to retry; otherwise use the recorded failure/retry clip. A *cancelled* update cannot be resumed. Note that a host pool with a failed update **cannot be deleted until the update is cancelled**.
 7. Two rules to repeat: **do not remove VMs from the pool** and **do not touch drain mode** while an update is running — the service owns drain mode for the duration and resets it at the end.
 8. Optional 30-second detour: **Azure Monitor → Activity log** filtered to the host pool, showing the same operations from the ARM side.
 
@@ -244,13 +262,13 @@ Show a real `CodeSymbolic` from your lab. If you have one, `AgentRegistrationFai
 | Will AVD Insights keep working? | The Azure Monitor agent is not reinstalled automatically — deploy it with Azure Policy. |
 | What if all my hosts are deallocated to save cost? | Supported — the existing power state and drain mode are honoured. |
 | Can I change OS disk size? | Not in the update. It follows the gallery image definition. |
-| How long will it take? | About 20 minutes per host; one initial host, then batches of your chosen size. |
+| How long will it take? | Roughly 20 minutes per host **wave**: one initial host, then concurrent batches. Six hosts at batch size two are roughly 80 minutes total; measure your own image and region. |
 
 ---
 
 ## Sources
 
-- Microsoft Learn — *Session host update for Azure Virtual Desktop*
-- Microsoft Learn — *Update session hosts using session host update in Azure Virtual Desktop*
-- Microsoft Learn — *Example diagnostic queries for session host update in Azure Virtual Desktop*
-- Microsoft Learn — *Troubleshoot session host update*
+- Microsoft Learn — [Session host update for Azure Virtual Desktop](https://learn.microsoft.com/en-us/azure/virtual-desktop/session-host-update)
+- Microsoft Learn — [Update session hosts using session host update in Azure Virtual Desktop](https://learn.microsoft.com/en-us/azure/virtual-desktop/session-host-update-configure)
+- Microsoft Learn — [Example diagnostic queries for session host update in Azure Virtual Desktop](https://learn.microsoft.com/en-us/azure/virtual-desktop/session-host-update-diagnostics)
+- Microsoft Learn — [Troubleshoot session host update](https://learn.microsoft.com/en-us/azure/virtual-desktop/troubleshoot-session-host-update)
