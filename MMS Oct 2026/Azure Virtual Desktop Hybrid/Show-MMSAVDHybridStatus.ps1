@@ -9,8 +9,10 @@
 .EXAMPLE
   .\Show-MMSAVDHybridStatus.ps1 -Phase AfterLive -NoColor
 .NOTES
-  Sign in first using Connect-AzAccount (Az.Accounts) or az login (Azure CLI).
-  The chosen context must be subscription e6ab1306-dfc4-4975-9f15-1df30c4699e2.
+  Reuses a valid Azure CLI / Az.Accounts context or starts an interactive
+  device-code login if the context is missing/expired. No password, token or
+  registration key is embedded in this file. Azure CLI or Az.Accounts must
+  already be installed on the computer where you run the script.
   Reader on Arc machines/extensions and AVD host pools, plus Graph Device.Read.All
   (or equivalent directory read scope), are needed. A 403 is an ERROR, not absence.
   Windows 11 here is hybrid Entra joined (Graph trustType=ServerAd); it does NOT
@@ -27,6 +29,7 @@ param(
     [string[]]$MachineNames = @('HYBRID-DEMO-01','HYBRID-DEMO-02','HYBRID-DEMO-03'),
     [string]$ExpectedReadyMachine = 'HYBRID-DEMO-03',
     [ValidateSet('Auto','AzureCLI','AzPowerShell')][string]$Auth = 'Auto',
+    [switch]$NoLogin,
     [string]$JsonPath,
     [switch]$NoColor,
     [string]$FixturePath
@@ -124,26 +127,60 @@ function Is-ExtensionHealthy($ext) {
     if ($null -ne $code -and [string]$code -notin @('0','ProvisioningState/succeeded')) { return $false }
     return $true
 }
+function Test-CurrentAzureContext {
+    # Probe the exact resource type this script will read; a context's subscription
+    # name alone does not prove its cached token is still valid.
+    $probe = $armRoot + $base + 'Microsoft.HybridCompute/machines/' + [uri]::EscapeDataString($MachineNames[0]) + '?api-version=2024-07-10'
+    try { $null = Get-Http $probe; return $true }
+    catch {
+        $reason = $_.Exception.Message
+        if ($reason -match '401|ExpiredAuthenticationToken|Please run.*login|NoAccessToken') { return $false }
+        throw ('Azure read failed (not an authentication prompt): ' + $reason)
+    }
+}
+function Get-CliSubscription {
+    $raw = & az account show --query id -o tsv --only-show-errors 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) { return '' }
+    return $raw.Trim()
+}
 
 if ($FixturePath) {
     $script:fixture = Get-Content -LiteralPath $FixturePath -Raw | ConvertFrom-Json
     $script:authMode = 'Fixture (offline)'
 } else {
-    # Prefer CLI in Auto: a saved Az context can name the right subscription but
-    # still hold an expired token. A live CLI account check avoids that false pass.
-    if ($Auth -ne 'AzPowerShell' -and (Get-Command az -ErrorAction SilentlyContinue)) {
-        $current = & az account show --query id -o tsv --only-show-errors 2>&1 | Out-String
-        if ($LASTEXITCODE -eq 0 -and $current.Trim() -eq $SubscriptionId) { $script:authMode = 'AzureCLI' }
-    }
-    if (-not $script:authMode -and $Auth -ne 'AzureCLI' -and (Get-Command Get-AzContext -ErrorAction SilentlyContinue)) {
+    $hasCli = [bool](Get-Command az -ErrorAction SilentlyContinue)
+    $hasPs = [bool](Get-Command Connect-AzAccount -ErrorAction SilentlyContinue)
+    if ($Auth -eq 'AzureCLI' -and -not $hasCli) { Write-Error 'Azure CLI is not installed; install it or use -Auth AzPowerShell with Az.Accounts.'; exit 1 }
+    if ($Auth -eq 'AzPowerShell' -and -not $hasPs) { Write-Error 'Az.Accounts is not installed; install it or use -Auth AzureCLI.'; exit 1 }
+    if (-not $hasCli -and -not $hasPs) { Write-Error 'Neither Azure CLI nor Az.Accounts is installed. Install one on this machine, or run the script on an authenticated presenter machine.'; exit 1 }
+    if ($Auth -eq 'AzPowerShell' -or ($Auth -eq 'Auto' -and -not $hasCli)) { $script:authMode='AzPowerShell' }
+    else { $script:authMode='AzureCLI' }
+    $valid = $false
+    if ($script:authMode -eq 'AzureCLI') {
+        if ((Get-CliSubscription) -ne $SubscriptionId) {
+            # Already logged into another subscription? Switch without another MFA challenge.
+            $null = & az account set --subscription $SubscriptionId --only-show-errors 2>&1 | Out-String
+        }
+        if ((Get-CliSubscription) -eq $SubscriptionId) { $valid = Test-CurrentAzureContext }
+    } else {
         try {
             $ctx = Get-AzContext -ErrorAction SilentlyContinue
-            if ($ctx -and $ctx.Subscription.Id -eq $SubscriptionId) { $script:authMode = 'AzPowerShell' }
-        } catch { }
+            if ($ctx -and $ctx.Subscription.Id -eq $SubscriptionId) { $valid = Test-CurrentAzureContext }
+        } catch { throw }
     }
-    if (-not $script:authMode) {
-        Write-Error ('No authenticated Azure context for ' + $SubscriptionId + '. Run Connect-AzAccount -SubscriptionId ' + $SubscriptionId + ' or az login; az account set --subscription ' + $SubscriptionId)
-        exit 1
+    if (-not $valid) {
+        if ($NoLogin) { Write-Error 'No usable Azure sign-in for this subscription (-NoLogin was specified).'; exit 1 }
+        if ($script:authMode -eq 'AzureCLI') {
+            Write-Host 'Azure sign-in required. Complete the device-code prompt on your own device; do not paste a code into chat.'
+            & az login --use-device-code --only-show-errors
+            if ($LASTEXITCODE -ne 0) { Write-Error 'Azure CLI sign-in did not complete.'; exit 1 }
+            $setOutput = & az account set --subscription $SubscriptionId --only-show-errors 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) { Write-Error ('Signed in, but cannot select subscription ' + $SubscriptionId + ': ' + $setOutput.Trim()); exit 1 }
+        } else {
+            Write-Host 'Azure sign-in required. Complete the device-code prompt on your own device; do not paste a code into chat.'
+            Connect-AzAccount -UseDeviceAuthentication -Subscription $SubscriptionId -ErrorAction Stop | Out-Host
+        }
+        if (-not (Test-CurrentAzureContext)) { Write-Error 'Sign-in returned, but an authenticated ARM read still failed. Check the chosen tenant and subscription.'; exit 1 }
     }
 }
 Write-Host ('MMS AVD Hybrid status | Phase: {0} | Subscription: {1} | Auth: {2}' -f $Phase,$SubscriptionId,$script:authMode)
