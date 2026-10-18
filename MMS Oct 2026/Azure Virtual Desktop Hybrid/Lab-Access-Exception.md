@@ -1,5 +1,7 @@
 # MMS AVD Hybrid demo lab — temporary access exception
 
+> **Historical record for retired `HYBRID-DEMO-01/02/03` only.** Their AD, Entra and Arc identities were removed during the manual rebuild. The replacement `MMS-AVDHYB-01/02/03` (VMIDs 122–124) did **not** inherit this local-admin grant; do not run the revert below on them or claim that `AD\user2` is elevated there without a separate exact-host verification and authorization.
+
 **Granted:** 2026-10-17 UTC
 **Purpose:** Allow demo user `AD\user2` to perform elevation steps on the three self-created AVD Hybrid demonstration hosts. This is **not** an AVD Hybrid prerequisite or a recommended production baseline.
 **Scope:** Local Administrators (`S-1-5-32-544`) on `HYBRID-DEMO-01`, `HYBRID-DEMO-02`, and `HYBRID-DEMO-03` only; direct member `AD\user2` (`S-1-5-21-931868896-1911896597-649028394-1645`). No domain-wide or Entra role was granted.
