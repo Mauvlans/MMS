@@ -21,6 +21,8 @@ The guests currently report Windows build `26300` and ConfigMgr client `5.00.914
 
 **Read-only preflight (2026-10-18):** `Show-MMSAVDHybridStatus.ps1 -Phase Staged` returned `PASS=9 READY=1 STAGED=4 FAIL=0 ERROR=0`. The Ready session host reported **Available**, zero sessions and a recent heartbeat; the Live pool was empty. This proves registration and broker status, **not** a successful Windows App sign-in or stable desktop. Complete that hands-on test before the presentation.
 
+**Staged on-host execution:** the same guarded `C:\Scripts\Invoke-MMSAVDHybridLive.ps1` is on `MMS-AVDHYB-01` (VMID 122) and `MMS-AVDHYB-02` (VMID 123) **only**. `MMS-AVDHYB-03` is already in Ready and must not run it. Start an elevated Windows PowerShell 5.1 session with a **process-only** execution-policy bypass (`powershell.exe -NoProfile -ExecutionPolicy Bypass`), then run `-Action Check` and `-Action Register -WhatIf` without signing in. Only `-Action Register -Confirm` begins the interactive device sign-in and Azure writes; perform that on stage, one host at a time. The script uses the preinstalled `Az.Accounts` module and stores no credential or registration token in the PS1. `-Action Status` is read-only and uses the same signed-in PowerShell process. The separate `Show-MMSAVDHybridStatus.ps1` remains a **presenter-side** status tool, not a guest registration script.
+
 **Required in the lab before the session**
 
 - [ ] The **Live** standard pool still has **zero** session hosts; the **Ready** standard pool has exactly `MMS-AVDHYB-03.AD.Mauvlan.Net` reporting Available. Session Host Configuration is not an option for Hybrid pools.
@@ -95,14 +97,17 @@ The guests currently report Windows build `26300` and ConfigMgr client `5.00.914
    azcmagent show --json
    ```
 2. In **Azure Arc → Machines**, show the machine already **Connected**; the live action is AVD registration, not Arc onboarding.
-3. Generate a host pool registration token (valid for the window you choose — 24 hours is plenty for a demo):
+3. On `MMS-AVDHYB-01`, preview the exact guest and Live pool before any Azure sign-in or registration-token rotation:
    ```powershell
-   $expiresUtc = (Get-Date).ToUniversalTime().AddHours(24).ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ")
-   $regInfo    = New-AzWvdRegistrationInfo -ResourceGroupName 'rg-MMS-AVDHybrid-UnderTheHood' -HostPoolName 'hp-MMS-AVDHybrid-UnderTheHood' -ExpirationTime $expiresUtc
-   $token      = $regInfo.Token
+   Set-Location C:\Scripts
+   .\Invoke-MMSAVDHybridLive.ps1 -Action Check
+   .\Invoke-MMSAVDHybridLive.ps1 -Action Register -WhatIf
    ```
-4. Install the **Azure Virtual Desktop Hybrid** extension on the Arc machine — do this in the portal for visibility: **Azure Arc → Machines → `MMS-AVDHYB-01` → Extensions → Add → Azure Virtual Desktop Hybrid**. Select the **Live** pool `hp-MMS-AVDHybrid-UnderTheHood` (not Ready), then **Review + Create**.
-5. Flip to the **Extensions** blade and watch the status move to **Succeeded**. Say the short-lived token is placed in protected settings, never pasted into a public script or screenshot.
+4. Run the explicit registration step from the **same host** and complete the Azure device sign-in yourself (never paste a code into chat). The script checks both pools, generates a four-hour token for the **Live** pool, then submits the Arc extension. Do **not** also click Add extension in the portal, which would duplicate the operation:
+   ```powershell
+   .\Invoke-MMSAVDHybridLive.ps1 -Action Register -Confirm
+   ```
+5. In the portal, show `MMS-AVDHYB-01` → **Extensions** moving to Succeeded; use `.\Invoke-MMSAVDHybridLive.ps1 -Action Status` in the same PowerShell session to inspect progress. An accepted request is not a registered or usable desktop.
 6. Jump to the host pool's **Session hosts** blade and refresh. If `MMS-AVDHYB-01` isn't **Available** yet (it can take up to 15 minutes), switch to the **pre-staged** `MMS-AVDHYB-03` and show that one **Available** instead — be upfront that this is the same process, just further along.
 7. Verify the test user's existing application-group assignment; add it only if absent. Have that user connect through Windows App to prove the loop closes.
 
@@ -114,40 +119,22 @@ The guests currently report Windows build `26300` and ConfigMgr client `5.00.914
 
 ## Demo 4 — Session hosts as code (~10 min, after slide "Demo 4")
 
-**Point to make:** everything you just clicked through is four PowerShell cmdlets — this is what you'd actually put in a pipeline for the tenth machine, not the first.
+**Point to make:** the guarded on-host script performs the same control-plane registration with explicit checks and a protected token. Do not run the raw cmdlets from an older guide as well as this script.
 
 ```powershell
-$rg        = 'rg-MMS-AVDHybrid-UnderTheHood'
-$hostPool  = 'hp-MMS-AVDHybrid-UnderTheHood' # Live, not Ready
-$machine   = 'MMS-AVDHYB-02'
-$location  = 'westus3'
-
-# 1. Confirm the machine is Arc-connected
-Get-AzConnectedMachine -ResourceGroupName $rg -Name $machine | Select-Object Name, Status
-
-# 2. Generate a registration token
-$expiresUtc = (Get-Date).ToUniversalTime().AddHours(24).ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ")
-$regInfo    = New-AzWvdRegistrationInfo -ResourceGroupName $rg -HostPoolName $hostPool -ExpirationTime $expiresUtc
-$token      = $regInfo.Token
-
-# 3. Install the AVD Arc extension, passing the token as a protected setting
-$settings          = @{ isCloudDevice = $false }
-$protectedSettings = @{ registrationToken = $token }
-New-AzConnectedMachineExtension -Name 'Microsoft.AzureVirtualDesktop.CloudDeviceExtension' `
-    -ResourceGroupName $rg -MachineName $machine -Location $location `
-    -Publisher 'Microsoft.AzureVirtualDesktop' -ExtensionType 'CloudDeviceExtension' `
-    -TypeHandlerVersion '1.0' -AutoUpgradeMinorVersion `
-    -Setting $settings -ProtectedSetting $protectedSettings
-
-# 4. Validate the extension, then the host pool registration
-Get-AzConnectedMachineExtension -ResourceGroupName $rg -MachineName $machine -Name 'Microsoft.AzureVirtualDesktop.CloudDeviceExtension'
-Get-AzWvdSessionHost -ResourceGroupName $rg -HostPoolName $hostPool
+Set-Location C:\Scripts   # on MMS-AVDHYB-02 only, in Windows PowerShell 5.1
+.\Invoke-MMSAVDHybridLive.ps1 -Action Check
+.\Invoke-MMSAVDHybridLive.ps1 -Action Register -WhatIf
+# First let demo 3's extension finish using its token; rotating the shared Live token early can disrupt it.
+.\Invoke-MMSAVDHybridLive.ps1 -Action Register -Confirm
+# Wait for the extension/broker to progress, then in this same PowerShell process:
+.\Invoke-MMSAVDHybridLive.ps1 -Action Status
 ```
 
 **Say these three things while it runs**
 
-- This is the exact call you'd wrap in a post-provisioning script, a Bicep deployment script resource, or a pipeline stage — Arc-enable the machine your way, then run these four cmdlets.
-- The `Az.ConnectedMachine` and `Az.DesktopVirtualization` modules are both required; install them ahead of time, not live.
+- The on-host script binds the Windows hostname and SMBIOS UUID to the exact Arc machine and **Live** pool, checks for existing AVD registration, and submits the extension once. Do not run it concurrently on both Live hosts: each explicit Register rotates a shared host-pool token.
+- `Az.Accounts` is already installed on both Live guests. The script needs an interactive operator with Azure write permissions; local Check/WhatIf need no Azure sign-in.
 - Nothing about the machine's OS image, size, or disk is visible here — because AVD Hybrid never touched any of that. Your provisioning tool owns it entirely.
 - Run this only against another deliberately staged **Live** machine. `MMS-AVDHYB-03` is already in **Ready**; do not re-run the Live registration snippet against it.
 
