@@ -7,27 +7,29 @@ Presenters: Adam Nichols, Chris Cavazos · 5 demos · ~44 minutes of demo time i
 
 ## 0. Lab build (do this before you travel)
 
-Everything below assumes one lab subscription with **three independent live pooled host pools**, each created **with a session host configuration**. The diagnostic/failure pool can be an existing fourth pool with suitable history; do not break a live demo pool to manufacture a failure.
+The isolated lab is in subscription `e6ab1306-dfc4-4975-9f15-1df30c4699e2` (**MSFT - External Sub - Mauvlan**), resource group `rg-MMS-SessionHostUpdate`, region `westus3`. It has three independent live pooled host pools with session host configurations, plus a separate history/failure pool. Do not break a live demo pool to manufacture a failure. The lab hosts are **Microsoft Entra joined**, not AD DS joined; the AD-specific Q&A below describes the supported product behavior, not the lab's own join path.
+
+Lab assets: gallery `galMMSSessionHostUpdate/Win11AVDTrusted` (versions `1.0.0` and `1.1.0`, two West US 3 replicas each), Key Vault `kvmmssessionhostupd`, Log Analytics workspace `law-MMS-SessionHostUpdate`, AVD workspace `ws-MMS-SessionHostUpdate`. VM prefixes are `MMSDEMO`, `MMSCHG`, `MMSCLI`, and `MMSHIST`. The existing `MVN-W3-VNET/AVDHosts` subnet is shared infrastructure; **do not modify its DNS, NSG, or address space for this demo**. All new VMs and their pools belong only to the named lab resource group.
 
 | Pool | Purpose | Hosts | Notes |
 |---|---|---|---|
 | `hp-mms-demo` | Demos 1 and 4 (same running update) | 6 | Small VM size (e.g. D2as_v5), Standard SSD; do not schedule another update here before demo 4 |
 | `hp-mms-change` | Demo 2 (portal image/size/disk change) | 2 | Starts on gallery image `1.0.0`, D2as_v5, Standard SSD; `1.1.0` is published and available |
 | `hp-mms-cli` | Demo 3 (PowerShell update) | 2 | Starts on D2as_v5 and Standard SSD, with no update already scheduled or running |
-| `hp-mms-history` | Demo 5 and optional staged failure/retry | as needed | Existing, separate pool with completed and failed update records within Log Analytics retention; never put its failed state on a live-update pool |
+| `hp-mms-history` | Demo 5 and optional staged failure/retry | 1 | Dedicated lab pool; requires completed and failed update records within Log Analytics retention before demo 5 is live-ready |
 
 **Required in the lab before the session**
 
-- [ ] All three live pools are **pooled** and show **Manage session host configuration** on the Session hosts blade. A pool without a session host configuration cannot use session host update.
-- [ ] All session hosts of a pool are in the **same Azure region and resource group**.
-- [ ] **Azure Compute Gallery** with at least **two image versions** published (e.g. `1.0.0` and `1.1.0`) and **two replicas** each — the version swap is the heart of demo 2.
-- [ ] Gallery lives in the **same subscription** as the host pool (cross-subscription gallery images are not supported).
-- [ ] Image is **generation 2** if you plan to demo Trusted launch.
-- [ ] **Key Vault** holding four secrets: domain-join username/password and local-admin username/password. If the vault uses private network access, attach a **managed identity** to the host pool; otherwise the vault must allow public access from all networks.
-- [ ] **Diagnostic settings** on every demo host pool sending to a Log Analytics workspace, with at least the categories **Checkpoint**, **Error**, and **Session Host Management Activity Logs** enabled. Without the third category, the `WVDSessionHostManagement` table never appears.
-- [ ] **Scaling plan disabled** on all live-update pools until their updates finish. An enabled scaling plan during an update can fail it with a runtime error.
-- [ ] **Resource locks removed** from the hosts and their resource group.
-- [ ] **vCPU quota** headroom for the peak concurrent replacement VMs across *all* updates running in parallel; verify quota in the demo region for both VM sizes. Replacements are created before originals are deleted.
+- [x] All three live pools are **pooled/Automated** with a **Succeeded** session host configuration, and their **10/10** intended hosts were read back as **Available** with running VMs. Confirm the portal shows **Manage session host configuration** on the stage account; API state alone does not prove the blade renders.
+- [x] All lab session-host VMs are in **westus3** and `rg-MMS-SessionHostUpdate`.
+- [x] **Azure Compute Gallery** versions `1.0.0` and `1.1.0` published with **two completed West US 3 replicas each**; their image-source VMs had different `C:\MMS-Demo\image-version.txt` markers. Verify the `1.1.0` marker on the replacement host after its update completes.
+- [x] Gallery is in the **same subscription** as the host pools (cross-subscription gallery images are not supported).
+- [x] Image is **generation 2 / TrustedLaunch**.
+- [x] **Key Vault** holds the local-admin username/password as two separate secrets. The Entra-joined lab requires no AD domain-join credential; an AD-joined variant would require two more secrets plus a delegated join account. Each pool has a system-assigned managed identity and scoped Key Vault Secrets User access. Keep the temporary vault network/data-plane access tracked and restrict it after provisioning.
+- [x] **Diagnostic settings** on every demo host pool send **Checkpoint**, **Error**, and **SessionHostManagement** to the lab Log Analytics workspace. Without the third category, the `WVDSessionHostManagement` table never appears.
+- [x] No scaling plans exist in the subscription; keep all live-update pools free of one until updates finish. An enabled scaling plan during an update can fail it with a runtime error.
+- [x] No resource locks found on the lab resource group; recheck before the event.
+- [x] West US 3 DASv5 family: **28/65 vCPUs used** at the readiness probe, leaving **37** at that instant. Recheck immediately before simultaneous live updates. `Standard_D4as_v5` has a restriction in **zone 2** for this subscription; these lab VMs are non-zonal. Replacements are created before originals are deleted.
 - [ ] On the **actual stage machine or Cloud Shell**, install a **preview** `Az.DesktopVirtualization` release with these cmdlets (a stable version number ≥5.3.0 is not sufficient). Run `Get-Command Update-AzWvdSessionHostConfiguration -Syntax` and confirm `-ManagedDiskType` against the loaded version. Rehearse demo 3 with that exact version.
 - [ ] A test user has an active session on the host that will be selected first in `hp-mms-demo`; verify the notification appears in a rehearsal (selection is name-based, not guaranteed by merely signing in anywhere).
 - [ ] Azure Cloud Shell, Log Analytics blade, and **all three** live host-pool blades open in pre-loaded browser tabs.
@@ -36,9 +38,29 @@ Everything below assumes one lab subscription with **three independent live pool
 - [ ] Open the actual `hp-mms-history` workspace and run both queries below: Query A returns a completed update, Query B returns a real failure/error row within retention. If either is empty, use a verified recording instead of claiming live diagnostics.
 - [ ] Run a full timed dress rehearsal in the exact demo order and record the subscription ID, pool IDs, module version, query row counts, clip paths, and the time each update reaches initial/batch/terminal status. **Do not mark ready until all five demos and their offline fallbacks pass.**
 
+Run `python3 check_lab.py` from this folder on a machine signed in to the lab subscription with Azure CLI. It reads back the exact host count/status and VM power state in every pool, gallery replication, diagnostic settings, and **runs both embedded Kusto queries**. It exits nonzero on any missing result. A green script is only the *cloud-state* gate; the unchecked presentation/laptop/user-session items above remain mandatory. Do not run it against a different subscription by changing an ambient default.
+
+**Power state between build/rehearsal and MMS:** all **11 session-host VMs** are deliberately **deallocated** to stop compute charges; the two generalized image-source VMs are also deallocated and must **never be started again**. Start the lab well before the session, not on stage:
+
+```bash
+python3 lab_power.py start      # scopes by exact pool IDs/VM ownership tags; never starts image-source VMs
+python3 check_lab.py           # wait until all AVD hosts are Available, not merely VM PowerState/running
+```
+
+After the session, sign out users, then park and verify:
+
+```bash
+python3 lab_power.py deallocate  # refuses when any active/disconnected session remains
+python3 lab_power.py status      # exits 0 only when all 11 session-host VMs are deallocated
+```
+
+Both scripts require Azure CLI signed into the named subscription. `check_lab.py` will intentionally fail while the lab is parked; **do not mark the session ready from a deallocated VM**. Verify the two `MMSIMG` source VMs remain deallocated separately; the power script deliberately excludes them.
+
 **Timing reality check.** A session host takes roughly **20 minutes** to update. For six hosts at batch size two, budget about **80 minutes** (one initial ~20 minutes, then three ~20-minute waves); two hosts take about **40 minutes**. These are estimates, not guarantees. After demos 1–3 (~26 minutes of demo time, plus slide time), demo 4 might find the initial host done, but its next batch can still be in flight. Pause waits for in-flight work to complete; the portal's ~20-second status refresh is **not** the pause completion time. Use the recording as the *primary* way to show a completed pause/resume and end-to-end update, with the live lab as a bonus.
 
 **Cost/blast-radius note.** Each *executed update* replaces VMs; a view-only walkthrough does not. Keep the pools small, and set `UpdateDeleteOriginalVM = $true` so the old VMs do not linger on the bill. Run only in session-owned lab pools, never an existing production or other-session pool.
+
+**Temporary access and cleanup.** The new lab Key Vault currently has its public endpoint enabled for the AVD service to read local-admin secrets; its *direct vault-level* secret-reader assignments are scoped to the four pool identities (also review inherited tenant/subscription roles). The temporary human **Key Vault Secrets Officer** assignment used to stage those secrets was removed after provisioning. After the rehearsal, test a trusted-services/private-access configuration against a *dedicated* update before narrowing vault networking; do **not** disable the endpoint blindly while the demo updates still need the secrets. The image-source VMs `MMSIMG01` and `MMSIMG02` are generalized/deallocated but their disks and published gallery replicas still incur storage charges. Keep them until image provenance and fallback are confirmed, then remove **only these exact lab-owned resources** after the event; do not delete by name pattern or touch the shared `MVN-Networking` group. The lab vault secrets expire on 2026-11-30 and must be rotated if the lab is kept beyond that date.
 
 ---
 
@@ -48,7 +70,7 @@ Everything below assumes one lab subscription with **three independent live pool
 
 1. Azure portal → search **Azure Virtual Desktop** → **Host pools** → `hp-mms-demo`.
 2. Select **Session hosts**. Call out the **Current Version** and **Target Version** columns — this is the version stamp of the session host configuration each host is running.
-3. Select **Manage session host configuration** → **View**. Walk the room through the configuration: image, VM size, OS disk type, security type, domain to join, local admin, custom configuration script. Then select **Cancel** — stress that *viewing* is safe, *editing* schedules an update.
+3. Select **Manage session host configuration** → **View**. Walk the room through the actual lab configuration: gallery image `1.0.0`, VM size, disk type, Trusted Launch, **Microsoft Entra join**, local admin secret references, and the empty custom script field. Then select **Cancel** — viewing is safe; editing schedules an update.
 4. Select **Manage session host update** → **New update**.
 5. **Basics tab.** Point at **Current host pool size** (read-only), set **VM batch size authorized to be removed** to `2`, and read out **Session hosts available during the update** (read-only). Say the sentence out loud: *"batch size is the maximum number of hosts I am willing to lose at once."* Explain the **initial host**: one host updates alone first, and if it fails the update stops there.
 6. **Session hosts tab.** Change nothing in this demo — say explicitly that if you change nothing, the hosts are redeployed with the same configuration (a legitimate "reset my pool to known-good" move).
@@ -60,7 +82,7 @@ Everything below assumes one lab subscription with **three independent live pool
 
 **Leave this update running.** You come back to it in demo 4.
 
-**Talk track while it starts:** hosts are picked by name up to the batch size → users are notified → grace period → drain mode → removed from the pool → new VMs created as `SessionHostName-DateTime` → extensions rejoin the directory and register the host → drain mode off → original VMs deleted.
+**Talk track while it starts:** hosts are picked by name up to the batch size → users are notified → grace period → drain mode → removed from the pool → new VMs created as `SessionHostName-DateTime` → extensions rejoin **Microsoft Entra ID in this lab** and register the host → drain mode off → original VMs deleted.
 
 **Failure mode on stage:** if validation fails, read the actual error (possible causes include a resource lock, missing Key Vault access, or an enabled scaling plan), then move to the recording; do not diagnose from the symptom alone.
 
@@ -80,7 +102,7 @@ Everything below assumes one lab subscription with **three independent live pool
 3. **Virtual machine size.** Move up (or down) one size — e.g. `D2as_v5` → `D4as_v5`. Tie it to the right-sizing scenario from the deck.
 4. **OS disk type.** Switch Standard SSD → **Premium SSD**. Two things to say: Premium is the production recommendation, and the **OS disk size cannot be changed here** — it follows the gallery image definition. The new disk is named `SessionHostName-DateTime_Hash`.
 5. **Security type.** Open the dropdown and *narrate without changing it* (unless your image is gen 2 and you want the full demo): Trusted launch auto-selects secure boot and vTPM; Confidential VMs add integrity monitoring and you cannot opt out of vTPM.
-6. **Domain to join.** Show the Key Vault pickers for the domain-join account and the optional OU path. Say the constraint plainly: **you cannot change the directory during an update.**
+6. **Directory.** Point to the lab's existing **Microsoft Entra** join selection and leave it unchanged. Explain that AD DS join instead needs a delegated domain-join account in Key Vault and can optionally target an OU, but **do not claim to show populated AD secret pickers in this Entra-joined lab**. You cannot switch directory type during an update.
 7. **Custom configuration.** Show the script URL field but **leave it unchanged** unless a pre-tested, reachable, idempotent script URL is already staged. Never paste an unverified URL into a live update.
 8. Continue through **Schedule** → **Notifications** → **Review** and select **Update**.
 9. Back on **Session hosts**, show the new **timestamped target version** and warning icon on any host whose Current Version is behind Target Version. Do not promise every icon remains visible once replacement starts.
@@ -102,14 +124,14 @@ Get-Module Az.DesktopVirtualization | Select-Object Name, Version, @{Name='Prere
 Get-Command Update-AzWvdSessionHostConfiguration -Syntax
 ```
 
-Stop if the loaded version is not `6.0.1-preview` or `-ManagedDiskType` is absent. Set/verify the intended subscription with `Get-AzContext` before any write; replace the resource group below with the **read-back value of the `hp-mms-cli` pool**, not a guessed placeholder.
+Stop if the loaded version is not `6.0.1-preview` or `-ManagedDiskType` is absent. Set/verify the intended subscription with `Get-AzContext` before any write. The values below name the *isolated* lab, not an existing production host pool.
 
 ```powershell
-$rg   = '<verified-resource-group>'
+$rg   = 'rg-MMS-SessionHostUpdate'
 $pool = 'hp-mms-cli'
 
 # Preflight: refuse to write to an unintended subscription or pool.
-$expectedSubscriptionId = '<verified-demo-subscription-id>'
+$expectedSubscriptionId = 'e6ab1306-dfc4-4975-9f15-1df30c4699e2'
 if ((Get-AzContext).Subscription.Id -ne $expectedSubscriptionId) { throw 'Wrong Azure subscription' }
 $target = Get-AzWvdHostPool -ResourceGroupName $rg -Name $pool -ErrorAction Stop
 if ($target.Name -ne $pool) { throw 'Wrong host pool' }
@@ -180,6 +202,8 @@ Get-AzWvdSessionHostManagementsUpdateStatus -ResourceGroupName $rg -HostPoolName
 
 Open **Log Analytics** on the workspace attached to `hp-mms-history`. Have both queries **pre-pasted in tabs** — do not type Kusto on stage.
 
+**Measured lab state:** the isolated `hp-mms-history` pool completed a real `1.0.0 → 1.1.0` update (the replacement host read back **Available**, **Microsoft Entra joined**, and its on-disk marker says `1.1.0`). Query A produced one real result after log ingestion. **Query B currently has zero rows**: no failed *update* has been staged, so this portion is **not live-ready**. Stage a failure safely in this dedicated pool and rerun the exact query, or capture a verified failure recording before claiming Demo 5 is ready. Do not present an unrelated configuration-validation failure as an update failure.
+
 **Query A — successful updates, duration and median minutes per host (last 30 days)**
 
 ```kusto
@@ -244,7 +268,7 @@ WVDSessionHostManagement
           SessionHostResourceId, Message, FromSessionHostConfigVer, ToSessionHostConfigVer
 ```
 
-Show a real `CodeSymbolic` from your lab. If you have one, `AgentRegistrationFailureGeneric` is the perfect closer: large batch sizes can produce it intermittently, and retrying the update usually clears it.
+Show a real `CodeSymbolic` from your lab **only if Query B returned a row**; otherwise play the verified failure recording. If you actually have `AgentRegistrationFailureGeneric`, it illustrates an intermittent large-batch failure that retrying often clears. Do not invent or promise that specific code.
 
 **Close the demo block by naming the fix for the classic failure:** if the source image was captured from a running session host, delete `C:\packages\plugin` before capturing — that folder blocks the DSC extension that joins updated VMs to the host pool.
 
@@ -255,7 +279,7 @@ Show a real `CodeSymbolic` from your lab. If you have one, `AgentRegistrationFai
 | Question | Answer |
 |---|---|
 | Can I update one host? | No. Changes are pool-wide, driven by the session host configuration. |
-| Do I lose my AD computer objects? | No. They are reused, the OS host name is unchanged, and existing GPOs still apply. Change domain or OU and you must clean up orphaned objects yourself. |
+| Do I lose my AD computer objects? | **For AD DS-joined pools**, computer objects are reused, the OS host name is unchanged, and existing GPOs generally continue to apply; review OU changes and clean up orphaned objects if moving domains. **This lab is Entra joined and does not create AD computer objects.** |
 | What about personal/dedicated pools? | Session host update targets **pooled** host pools with a session host configuration. |
 | Does it work in Azure Government or 21Vianet? | No. Global Azure cloud only today. |
 | Can I run updates on several pools at once? | Yes across pools; only one update running or scheduled **per pool** at a time. |
