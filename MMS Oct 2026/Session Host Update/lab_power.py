@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Power only the 11 MMS session hosts. Never starts generalized image-source VMs."""
+"""Power only the 7 MMS session hosts. Never starts generalized image-source VMs."""
 from __future__ import annotations
 
 import argparse
@@ -12,7 +12,7 @@ from typing import Any
 
 SUB = "e6ab1306-dfc4-4975-9f15-1df30c4699e2"
 RG = "rg-MMS-SessionHostUpdate"
-EXPECTED = {"hp-mms-demo": 6, "hp-mms-change": 2, "hp-mms-cli": 2, "hp-mms-history": 1}
+EXPECTED = {"hp-mms-demo": 4, "hp-mms-change": 1, "hp-mms-cli": 1, "hp-mms-history": 1}
 BASE = (f"https://management.azure.com/subscriptions/{SUB}/resourceGroups/{RG}"
         "/providers/Microsoft.DesktopVirtualization/hostPools")
 

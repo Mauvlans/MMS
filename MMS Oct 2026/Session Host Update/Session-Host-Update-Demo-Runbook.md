@@ -13,18 +13,19 @@ Lab assets: gallery `galMMSSessionHostUpdate/Win11AVDTrusted` (versions `1.0.0` 
 
 | Pool | Purpose | Hosts | Notes |
 |---|---|---|---|
-| `hp-mms-demo` | Demos 1 and 4 (same running update) | 6 | Small VM size (e.g. D2as_v5), Standard SSD; do not schedule another update here before demo 4 |
-| `hp-mms-change` | Demo 2 (portal image/size/disk change) | 2 | Starts on gallery image `1.0.0`, D2as_v5, Standard SSD; `1.1.0` is published and available |
-| `hp-mms-cli` | Demo 3 (PowerShell update) | 2 | Starts on D2as_v5 and Standard SSD, with no update already scheduled or running |
+| `hp-mms-demo` | Demos 1 and 4 (same running update) | 4 | D2as_v5, Standard SSD; batch size 2; do not schedule another update here before demo 4 |
+| `hp-mms-change` | Demo 2 (portal image/size/disk change) | 1 | Starts on gallery image `1.0.0`, D2as_v5, Standard SSD; `1.1.0` is published and available; no spare capacity while this one host updates |
+| `hp-mms-cli` | Demo 3 (PowerShell update) | 1 | Starts on D2as_v5 and Standard SSD, with no update already scheduled or running; use batch size 1 |
 | `hp-mms-history` | Demo 5 and optional staged failure/retry | 1 | Dedicated lab pool; requires completed and failed update records within Log Analytics retention before demo 5 is live-ready |
 
-**Sizing review (proposal only; not applied):** the strict minimum to retain all four independent pools and the batch-size-2 story is **3 + 1 + 1 + 1 = 6 session hosts**. Demo 1 then has an initial host and one two-host batch (roughly 40 minutes total at the 20-minute-per-wave estimate), so its update may finish before Demo 4; pause/resume must be shown from a verified recording. The more practical smaller footprint is **4 + 1 + 1 + 1 = 7 hosts**, with an initial host, a two-host batch, then a final host (roughly 60 minutes); even that does **not** guarantee an in-progress batch when Demo 4 arrives. Keep six hosts in `hp-mms-demo` if a live pause/resume is essential. The one-host `hp-mms-history` update was exercised successfully, proving a single-host pool can update its sole host, but it has zero spare capacity during replacement. Do not collapse the portal-change, CLI, and pre-staged failure paths into one pool: only one update may run or be scheduled per pool.
+**Applied footprint:** **4 + 1 + 1 + 1 = 7 session hosts**. Demo 1 has an initial host, a two-host batch, then a final host (roughly 60 minutes at the 20-minute-per-wave estimate); this does **not** guarantee an in-progress batch when Demo 4 arrives, so capture and verify a pause/resume recording as the primary path **before the event** (still an open readiness gate). A strict six-host footprint (3 + 1 + 1 + 1) would cut Demo 1 to roughly 40 minutes and make that live beat still less likely. The one-host `hp-mms-history` update was exercised successfully, proving a single-host pool can update its sole host, but has zero spare capacity during replacement. Keep separate portal-change, CLI, and history pools: only one update may run or be scheduled per pool.
 
-The currently deployed counts in the table above remain **6 + 2 + 2 + 1 = 11** until a deliberate scale-in. All 11 session hosts and both generalized image-source VMs are deallocated, so this is a **storage/quota** reduction, not an immediate running-compute saving. Each VM has a 127-GiB Standard SSD OS disk. Never delete a VM record and assume its disk vanished; read back the exact VM, session-host object, desired instance count, disk, and NIC after any supported scale-in. The two image-source VMs are separate from the session-host count and can be removed only after preserving/confirming both gallery versions and their rollback provenance.
+The four excess lab hosts (`MMSDEMO-4`, `MMSDEMO-5`, `MMSCHG-1`, `MMSCLI-1`) were removed through AVD and their exact VM, 127-GiB Standard SSD OS disk, and NIC were read back absent (**508 GiB of provisioned OS disks removed**). The desired pool counts now match the seven registered hosts. All seven hosts and both generalized image-source VMs remain deallocated. This cuts persistent storage/quota, **not** running compute while parked. Never delete a VM record and assume its disk vanished; read back the exact VM, session-host object, desired instance count, disk, and NIC. The two image-source VMs are separate and were not touched.
 
 **Required in the lab before the session**
 
-- [x] All three live pools are **pooled/Automated** with a **Succeeded** session host configuration, and their **10/10** intended hosts were read back as **Available** with running VMs. Confirm the portal shows **Manage session host configuration** on the stage account; API state alone does not prove the blade renders.
+- [x] All three live pools are **pooled/Automated** with a **Succeeded** session host configuration, and **7/7** desired session hosts remain registered after scale-in. The retained hosts had previously reached Available, but are now parked. Confirm the portal shows **Manage session host configuration** on the stage account; API state alone does not prove the blade renders.
+- [ ] After the pre-session startup, read back all **7/7** hosts as **Available** with VMs running; this must be rechecked after scale-in, not inferred from the old 11-host rehearsal.
 - [x] All lab session-host VMs are in **westus3** and `rg-MMS-SessionHostUpdate`.
 - [x] **Azure Compute Gallery** versions `1.0.0` and `1.1.0` published with **two completed West US 3 replicas each**; their image-source VMs had different `C:\MMS-Demo\image-version.txt` markers. Verify the `1.1.0` marker on the replacement host after its update completes.
 - [x] Gallery is in the **same subscription** as the host pools (cross-subscription gallery images are not supported).
@@ -44,7 +45,7 @@ The currently deployed counts in the table above remain **6 + 2 + 2 + 1 = 11** u
 
 Run `python3 check_lab.py` from this folder on a machine signed in to the lab subscription with Azure CLI. It reads back the exact host count/status and VM power state in every pool, gallery replication, diagnostic settings, and **runs both embedded Kusto queries**. It exits nonzero on any missing result. A green script is only the *cloud-state* gate; the unchecked presentation/laptop/user-session items above remain mandatory. Do not run it against a different subscription by changing an ambient default.
 
-**Power state between build/rehearsal and MMS:** all **11 session-host VMs** are deliberately **deallocated** to stop compute charges; the two generalized image-source VMs are also deallocated and must **never be started again**. Start the lab well before the session, not on stage:
+**Power state between build/rehearsal and MMS:** all **7 session-host VMs** are deliberately **deallocated** to stop compute charges; the two generalized image-source VMs are also deallocated and must **never be started again**. Start the lab well before the session, not on stage:
 
 ```bash
 python3 lab_power.py start      # scopes by exact pool IDs/VM ownership tags; never starts image-source VMs
@@ -55,12 +56,12 @@ After the session, sign out users, then park and verify:
 
 ```bash
 python3 lab_power.py deallocate  # refuses when any active/disconnected session remains
-python3 lab_power.py status      # exits 0 only when all 11 session-host VMs are deallocated
+python3 lab_power.py status      # exits 0 only when all 7 session-host VMs are deallocated
 ```
 
 Both scripts require Azure CLI signed into the named subscription. `check_lab.py` will intentionally fail while the lab is parked; **do not mark the session ready from a deallocated VM**. Verify the two `MMSIMG` source VMs remain deallocated separately; the power script deliberately excludes them.
 
-**Timing reality check.** A session host takes roughly **20 minutes** to update. For six hosts at batch size two, budget about **80 minutes** (one initial ~20 minutes, then three ~20-minute waves); two hosts take about **40 minutes**. These are estimates, not guarantees. After demos 1–3 (~26 minutes of demo time, plus slide time), demo 4 might find the initial host done, but its next batch can still be in flight. Pause waits for in-flight work to complete; the portal's ~20-second status refresh is **not** the pause completion time. Use the recording as the *primary* way to show a completed pause/resume and end-to-end update, with the live lab as a bonus.
+**Timing reality check.** A session host takes roughly **20 minutes** to update. For four hosts at batch size two, budget about **60 minutes** (one initial ~20 minutes, then a two-host batch ~20 minutes, then one final host ~20 minutes); each one-host change/CLI pool is roughly **20 minutes**. These are estimates, not guarantees. After demos 1–3 (~26 minutes of demo time, plus slide time), demo 4 might find the update anywhere from the initial host to complete. Pause waits for in-flight work to complete; the portal's ~20-second status refresh is **not** the pause completion time. Use the recording as the *primary* way to show a completed pause/resume and end-to-end update, with the live lab as a bonus.
 
 **Cost/blast-radius note.** Each *executed update* replaces VMs; a view-only walkthrough does not. Keep the pools small, and set `UpdateDeleteOriginalVM = $true` so the old VMs do not linger on the bill. Run only in session-owned lab pools, never an existing production or other-session pool.
 
@@ -159,7 +160,7 @@ Get-AzWvdSessionHostConfiguration -ResourceGroupName $rg -HostPoolName $pool |
 Update-AzWvdSessionHostManagement `
     -ResourceGroupName            $rg `
     -HostPoolName                 $pool `
-    -UpdateMaxVmsRemoved          2 `
+    -UpdateMaxVmsRemoved          1 `
     -UpdateDeleteOriginalVM       $true `
     -UpdateLogOffDelayMinute      5 `
     -UpdateLogOffMessage          'Saving your work now - please sign out and sign back in.' `
@@ -290,7 +291,7 @@ Show a real `CodeSymbolic` from your lab **only if Query B returned a row**; oth
 | Will AVD Insights keep working? | The Azure Monitor agent is not reinstalled automatically — deploy it with Azure Policy. |
 | What if all my hosts are deallocated to save cost? | Supported — the existing power state and drain mode are honoured. |
 | Can I change OS disk size? | Not in the update. It follows the gallery image definition. |
-| How long will it take? | Roughly 20 minutes per host **wave**: one initial host, then concurrent batches. Six hosts at batch size two are roughly 80 minutes total; measure your own image and region. |
+| How long will it take? | Roughly 20 minutes per host **wave**: one initial host, then concurrent batches. This lab's four-host demo pool at batch size two is roughly 60 minutes total; measure your own image and region. |
 
 ---
 

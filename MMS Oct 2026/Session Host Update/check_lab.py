@@ -15,7 +15,7 @@ RG = "rg-MMS-SessionHostUpdate"
 PREFIX = f"/subscriptions/{SUB}/resourceGroups/{RG}"
 AVD = f"https://management.azure.com{PREFIX}/providers/Microsoft.DesktopVirtualization"
 API = "2025-04-01-preview"
-EXPECTED = {"hp-mms-demo": 6, "hp-mms-change": 2, "hp-mms-cli": 2, "hp-mms-history": 1}
+EXPECTED = {"hp-mms-demo": 4, "hp-mms-change": 1, "hp-mms-cli": 1, "hp-mms-history": 1}
 LOGS = {"Checkpoint", "Error", "SessionHostManagement"}
 RUNBOOK = Path(__file__).with_name("Session-Host-Update-Demo-Runbook.md")
 
