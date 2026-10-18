@@ -18,6 +18,10 @@ Lab assets: gallery `galMMSSessionHostUpdate/Win11AVDTrusted` (versions `1.0.0` 
 | `hp-mms-cli` | Demo 3 (PowerShell update) | 2 | Starts on D2as_v5 and Standard SSD, with no update already scheduled or running |
 | `hp-mms-history` | Demo 5 and optional staged failure/retry | 1 | Dedicated lab pool; requires completed and failed update records within Log Analytics retention before demo 5 is live-ready |
 
+**Sizing review (proposal only; not applied):** the strict minimum to retain all four independent pools and the batch-size-2 story is **3 + 1 + 1 + 1 = 6 session hosts**. Demo 1 then has an initial host and one two-host batch (roughly 40 minutes total at the 20-minute-per-wave estimate), so its update may finish before Demo 4; pause/resume must be shown from a verified recording. The more practical smaller footprint is **4 + 1 + 1 + 1 = 7 hosts**, with an initial host, a two-host batch, then a final host (roughly 60 minutes); even that does **not** guarantee an in-progress batch when Demo 4 arrives. Keep six hosts in `hp-mms-demo` if a live pause/resume is essential. The one-host `hp-mms-history` update was exercised successfully, proving a single-host pool can update its sole host, but it has zero spare capacity during replacement. Do not collapse the portal-change, CLI, and pre-staged failure paths into one pool: only one update may run or be scheduled per pool.
+
+The currently deployed counts in the table above remain **6 + 2 + 2 + 1 = 11** until a deliberate scale-in. All 11 session hosts and both generalized image-source VMs are deallocated, so this is a **storage/quota** reduction, not an immediate running-compute saving. Each VM has a 127-GiB Standard SSD OS disk. Never delete a VM record and assume its disk vanished; read back the exact VM, session-host object, desired instance count, disk, and NIC after any supported scale-in. The two image-source VMs are separate from the session-host count and can be removed only after preserving/confirming both gallery versions and their rollback provenance.
+
 **Required in the lab before the session**
 
 - [x] All three live pools are **pooled/Automated** with a **Succeeded** session host configuration, and their **10/10** intended hosts were read back as **Available** with running VMs. Confirm the portal shows **Manage session host configuration** on the stage account; API state alone does not prove the blade renders.
@@ -278,7 +282,7 @@ Show a real `CodeSymbolic` from your lab **only if Query B returned a row**; oth
 
 | Question | Answer |
 |---|---|
-| Can I update one host? | No. Changes are pool-wide, driven by the session host configuration. |
+| Can I update one host? | You can't select one host *within a larger pool*; the update targets the pool. A one-host pool updates its sole host (proved in this lab), but has no remaining capacity during replacement. |
 | Do I lose my AD computer objects? | **For AD DS-joined pools**, computer objects are reused, the OS host name is unchanged, and existing GPOs generally continue to apply; review OU changes and clean up orphaned objects if moving domains. **This lab is Entra joined and does not create AD computer objects.** |
 | What about personal/dedicated pools? | Session host update targets **pooled** host pools with a session host configuration. |
 | Does it work in Azure Government or 21Vianet? | No. Global Azure cloud only today. |
