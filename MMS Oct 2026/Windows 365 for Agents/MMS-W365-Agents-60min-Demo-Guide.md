@@ -171,20 +171,16 @@ This is the emotional centre of the session. Do not rush it, and do not talk ove
 - [ ] Pool in `Available` state with at least one free session
 - [ ] The deployed Agent 365 app/client is authenticated with an **agent-user bearer token** for the W365 MCP server; its actual `StartSession`, `GetSessionDetails`, `EndSession` tools were discovered and rehearsed
 - [ ] A scripted task that is visual and deterministic, with a deliberate pause for the human takeover before completion; the post-handoff finish fits inside 2 minutes
-- [ ] HTTPS (or `http://localhost`) screen-share viewer page loaded with the SDK bundle, a sized container, and the **acquired session link** ready to pass in
+- [ ] The pinned Playground Agent's `/screenshare` viewer works from its **Watch live** Teams card; configure public HTTPS origin, viewer OIDC sign-in, allowed tenant, and a resolvable human owner of the agent instance
 - [ ] Separate screen-share token has `Computer.See` and `Computer.Control`; the blueprint has ARI grants and inheritance; neither token is visible on screen
 
 ### Steps
 
-1. **Acquire and wait for Ready (up to 1 min, rehearsed).** Have the deployed Agent 365 app call `StartSession` through the `mcp_W365ComputerUse` server on the A365 tooling gateway. Reuse the **same idempotency key** on a timed-out retry, not a new allocation. Poll `GetSessionDetails` every 2–5 seconds until `Ready` (or cut to recording if it fails the rehearsed timeout). Save the returned **session link** for the viewer.
+1. **Acquire and wait for Ready (up to 1 min, rehearsed).** Have the deployed Agent 365 app call `StartSession` through the `mcp_W365ComputerUse` server on the A365 tooling gateway. Reuse the **same idempotency key** on a timed-out retry, not a new allocation. Poll `GetSessionDetails` every 2–5 seconds until `Ready` (or cut to recording if it fails the rehearsed timeout). The Playground sample captures `screenShareUrl` from the result; confirm its viewer offer actually arrives. Its initial screenshot is best-effort, **not** a substitute for a Ready gate.
    - *Talk track:* "Allocation can take up to 30 seconds. Acquired is not ready; the agent waits before sending input."
 2. **Connect (1 min).** Show the actual `mcp_W365ComputerUse` tools from the live A365 SDK client (`initialize` → `tools/list` → `tools/call` is handled by the SDK). The gateway URL and the `Mcp-Session-Id` are client/SDK concerns, not the partner REST `/api/pools/...` and `x-ms-sessionId` headers.
    - *Talk track:* "This is MCP behind Agent 365 identity, blueprint authorization, and the tooling gateway — not an anonymous MCP endpoint any client can simply point at."
-3. **Observe (1 min).** Mount the screen-share viewer with the session link and connect with the **ARI-authorized agent token**.
-   ```
-   viewer = new ScreenShareViewer({ container, sessionLink, mode: 'interactive' });
-   await viewer.connect(agentTokenWithSeeAndControl);
-   ```
+3. **Observe (1 min).** Click the sample's **Watch live** card, sign in as the human owner, and open its built-in `/screenshare` page. It redeems a short-lived ticket and connects with an ARI token. The sample's pinned `screenshare-sdk/1.0.0` uses `new ScreenShareViewer({ container, computerUrl, viewerUrl, mode: 'interactive' })`, with a non-empty `api-version` on `computerUrl`. **Do not use the `sessionLink` constructor shown in the generic developer doc with this pinned bundle**; the bundle rejects it.
    - *Talk track:* "Same Cloud PC, same session. The human channel is parallel to the agent channel — there is no second environment to provision."
 4. **Act and pause (2 min).** Let the agent start the scripted task, then pause it at the prearranged correction point while it is still running. **Stop talking and let the room watch.**
    - Then narrate the loop: observe → act → observe. Point out that the platform mediates each action, enforces the session identity, applies guardrails, and records what happened.
@@ -202,8 +198,8 @@ This is the emotional centre of the session. Do not rush it, and do not talk ove
 ### Failure modes and fallbacks
 | If this happens | Do this |
 |---|---|
-| `TOKEN_EXPIRED` in the viewer | Call `viewer.updateToken(newToken)` — do it live, it is a good teaching moment |
-| `START_FAILED` | Check the session link and that the Cloud PC is still acquired; cut to the recording |
+| `TOKEN_EXPIRED` in the sample viewer | Its current UI ends the view; return to Teams and ask the agent to offer a fresh share. Do not promise a live `updateToken` path that this page does not expose |
+| `START_FAILED` | Check the versioned `computerUrl`, viewer CDN, and that the Cloud PC is still acquired; cut to the recording |
 | `JOIN_FAILED` | Retry with a fresh token |
 | `RECONNECT_FAILED` | `viewer.stop()`, create a new viewer, reconnect with a fresh token |
 | `MODE_RESTRICTED` on takeControl | Recreate the viewer in `interactive` mode; also verify `Computer.Control` consent/inheritance if authorization fails |
@@ -240,6 +236,6 @@ Not scripted into the 60-minute run, but keep this ready as a Q&A answer or a bo
 
 - [What is Windows 365 for Agents](https://learn.microsoft.com/en-us/windows-365/agents/introduction-windows-365-for-agents) · [Agent session lifecycle](https://learn.microsoft.com/en-us/windows-365/agents/agent-session-lifecycle) · [Cloud PC agent pools](https://learn.microsoft.com/en-us/windows-365/agents/cloud-pc-agent-pools) · [Create a provisioning policy (agents)](https://learn.microsoft.com/en-us/windows-365/agents/create-provisioning-policy-agents)
 - [Conditional Access for agent users](https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-agent-user) — distinct from policies targeting agent identities; agent-user targeting and execution-environment condition are Preview.
-- [A365 developer getting started](https://github.com/microsoft/windows-365-for-agents/blob/main/docs/getting-started.md) · [ATG API reference](https://github.com/microsoft/windows-365-for-agents/blob/main/docs/api-reference.md) · [ATG authentication](https://github.com/microsoft/windows-365-for-agents/blob/main/docs/authentication.md) · [Screen-sharing SDK](https://github.com/microsoft/windows-365-for-agents/blob/main/docs/screen-sharing.md)
+- [A365 developer getting started](https://github.com/microsoft/windows-365-for-agents/blob/main/docs/getting-started.md) · [ATG API reference](https://github.com/microsoft/windows-365-for-agents/blob/main/docs/api-reference.md) · [ATG authentication](https://github.com/microsoft/windows-365-for-agents/blob/main/docs/authentication.md) · [Playground viewer source](https://github.com/microsoft/windows-365-for-agents/blob/main/W365A-Playground-Agent/src/Screenshare/ScreenshareViewerPage.cs). The generic [screen-sharing guide](https://github.com/microsoft/windows-365-for-agents/blob/main/docs/screen-sharing.md) describes a different constructor: trust the versioned CDN bundle actually loaded by the sample and validate its API before stage use.
 - [Microsoft Learn partner-session API overview](https://learn.microsoft.com/en-us/windows-365/agents/mcp-tool-overview) documents **another** checkout/MCP/check-in surface (`/api/pools/...`, `x-ms-sessionId`, `{computerUrl}/mcp`, `baseUrl`/`computerId`). It is **not** the A365 ATG flow scripted above. If your actual client implements this path, verify its availability, token exchange, viewer bundle, and full session on the demo tenant and revise Demo 3 coherently.
 - [What's new](https://learn.microsoft.com/en-us/windows-365/agents/whats-new): W365 for Agents GA; compliance CA shipped, while agent-user targeting and endpoint condition remain documented as Preview on the Entra page above.
