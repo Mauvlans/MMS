@@ -6,16 +6,20 @@
 
 > All product behaviour below is drawn from Microsoft Learn — *Windows 365 for Agents* (Introduction, Architecture overview, Agent session lifecycle, Cloud PC agent pools, Create a provisioning policy (agents), Identity and security, Agent authentication model, MCP tool overview). Verify against the current docs before you present; this space moves fast.
 
-> **Readiness: NO-GO for a live three-demo delivery until the gate below passes.** This repository currently contains this guide only. The deck, client, viewer page, scripted task, recording, and tenant evidence have not been supplied or exercised here. The partner-session REST contract described on [Microsoft Learn](https://learn.microsoft.com/en-us/windows-365/agents/mcp-tool-overview) and the Agent 365 tooling-gateway (ATG) contract in [Microsoft's developer repository](https://github.com/microsoft/windows-365-for-agents/blob/main/docs/api-reference.md) are different integration paths. The live script below uses the **Agent 365 ATG path**; do not mix its MCP session operations with partner REST checkout headers. If the actual client is partner-REST based, rehearse that contract and replace the Demo 3 steps as a unit rather than changing individual headers on stage.
+> **Readiness: NO-GO for a live three-demo delivery until the gate below passes.**
+>
+> - **Verified:** The separate private [MMS agent repository](https://github.com/Mauvlans/MMS-W365A-Agent/tree/mms-demo) contains the deployed client, scripted Notepad task and screen-share viewer. The MMS billing plan and pre-provisioned pool are active with two free sessions; the agent user is assigned. Teams replied and a real `START MMS` acquired a Cloud PC.
+> - **Blocked:** The first rehearsal stopped safely at an unexpected Edge profile sign-in prompt before Notepad. Watch live human sign-in failed `AADSTS82018` because the viewer used the agent blueprint as an interactive OIDC client. `CANCEL MMS` invoked EndSession and revoked the viewer ticket; the presenter reports two available sessions again. Takeover and Demo 2's Conditional Access denial/allow remain unverified. The deck and offline recordings are still absent.
+> - **Integration:** The partner-session REST contract on [Microsoft Learn](https://learn.microsoft.com/en-us/windows-365/agents/mcp-tool-overview) and the Agent 365 tooling-gateway (ATG) contract in [Microsoft's developer repository](https://github.com/microsoft/windows-365-for-agents/blob/main/docs/api-reference.md) are different paths. This script uses **ATG**; do not mix it with partner REST checkout headers. If the actual client changes to partner REST, replace and rehearse Demo 3 as a unit.
 
 ### Go / no-go gate (presenter signs off after a full rehearsal)
 
 - [ ] Put the actual deck at the referenced path; compare slide order, titles, and durations with the run-of-show.
 - [ ] Identify the real demo tenant and confirm licenses (Agent 365, Windows Enterprise E3+, Intune, Entra ID P1), billing enabled, agent user, blueprint permissions/consent/inheritance, and a **separate** healthy pre-provisioned pool with free sessions. Do not use the new live-created pool as the fallback.
-- [ ] Identify and launch the **actual** Agent 365 app/client and HTTPS screen-share viewer; record the commands/URLs, owner, and token-refresh method in a private presenter handoff (no secrets in Git). Verify the MCP tool prefix comes from `mcp_W365ComputerUse`, not a built-in model tool.
+- [ ] Verify the deployed [MMS Agent 365 client](https://github.com/Mauvlans/MMS-W365A-Agent/blob/mms-demo/MMS-DEMO.md) on a new live turn: Teams reply and MCP `StartSession`/native desktop actions already worked, but the fixed Notepad task and presenter viewer still need a successful rehearsal. Keep the owner and token-refresh method in a private presenter handoff (no secrets in Git).
 - [ ] Confirm `Computer.See` and `Computer.Control` are declared, consented, and inherited by the blueprint; connect the viewer and successfully take/release control on a real session.
 - [ ] Capture a real denial **and** success from a fresh agent-user token acquisition/resource access in an isolated test condition, with matching sign-in-log evidence; do not assume a checkout attempt alone proves Conditional Access.
-- [ ] Run all three demos end-to-end on the presenter rig inside the agenda slots, check in the session, then verify capacity returns. Record local, token-free MP4 fallbacks and test playback offline.
+- [ ] Run all three demos end-to-end on the presenter rig inside the agenda slots, check in the session, then verify capacity returns. The first Demo 3 attempt was cancelled after Edge sign-in interrupted it; do not use that as a completed run. Record local, token-free MP4 fallbacks and test playback offline.
 
 ---
 
@@ -46,7 +50,7 @@ Complete these **at least 48 hours ahead**. Several steps are slow and cannot be
 Record a clean run of every demo the day before, as a full-screen MP4 with no audio and no visible tokens. Test local playback without conference Wi-Fi. If any live step stalls, narrate over the recording and keep moving. Announce it plainly if you switch — the audience respects it.
 
 **Safety and hygiene**
-- Use a demo tenant, never production.
+- Use dedicated MMS identities, pool and app in this shared tenant; never alter the existing Ignite HOL pool or shared billing plan to make an MMS step pass. Treat every live-created pool as additional billable capacity and retire only the exact MMS-created pool after the event.
 - Redact tenant IDs, object IDs, and bearer tokens on screen. Blur or use a scratch tenant.
 - Never paste a real token into a slide, a chat, or a shared doc.
 
@@ -100,7 +104,7 @@ Mirrors the **"60-Minute Agenda"** table slide in the deck.
 6. **Configuration page.** Choose **Language & region** → **Next**.
 7. **Scope tags page.** Add a scope tag if you use delegated admin → **Next**.
    - *Talk track:* "Scope tags are how you keep the finance agent pool out of the hands of the HR admin."
-8. **Review + create** → **Create**.
+8. **Review + create.** Creating this **second** pool adds billable always-available Cloud PCs on top of `MMS-W365A-Ready`. Only select **Create** if the additional cost and exact-ID cleanup owner have been approved; otherwise stop on the review screen, explain the shape, and cut to the ready pool without creating another one.
 9. **Cut to the pre-provisioned pool.** Say it out loud: "Provisioning takes 20 to 30 minutes, so here is one I made earlier."
 10. Open the pre-provisioned policy and show:
     - **Pool status** — `Available` (mention the other values: Creating, Updating, Available with warning, Failed, Deleting — status is evaluated **at pool level, not per Cloud PC**).
