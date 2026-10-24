@@ -23,6 +23,19 @@ The guests currently report Windows build `26300` and ConfigMgr client `5.00.914
 
 **Staged on-host execution:** the same guarded `C:\Scripts\Invoke-MMSAVDHybridLive.ps1` is on `MMS-AVDHYB-01` (VMID 122) and `MMS-AVDHYB-02` (VMID 123) **only**. `MMS-AVDHYB-03` is already in Ready and must not run it. Start an elevated Windows PowerShell 5.1 session with a **process-only** execution-policy bypass (`powershell.exe -NoProfile -ExecutionPolicy Bypass`), then run `-Action Check` and `-Action Register -WhatIf` without signing in. Only `-Action Register -Confirm` begins the interactive device sign-in and Azure writes; perform that on stage, one host at a time. The script uses the preinstalled `Az.Accounts` module and stores no credential or registration token in the PS1. `-Action Status` is read-only and uses the same signed-in PowerShell process. The separate `Show-MMSAVDHybridStatus.ps1` remains a **presenter-side** status tool, not a guest registration script.
 
+**Optional fourth host — manual Arc onboarding only:** `MMS-AVDHYB-04` (VMID `125`, `10.0.10.170`) is domain/hybrid-joined but deliberately **not yet Arc-connected or AVD-registered**. It is outside the three-host Live/Ready demo plan. `C:\Scripts\Connect-MMSAVDHYB04Arc.ps1` and a Microsoft-signed `AzureConnectedMachineAgent.msi` are staged **only on `-04`**. The PS1 requires this exact hostname and SMBIOS UUID, verifies the pinned installer hash, and contains no credential. In an elevated, interactive Windows PowerShell 5.1 session on `-04`, use a process-only execution-policy bypass and run:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass
+Set-Location C:\Scripts
+.\Connect-MMSAVDHYB04Arc.ps1 -Action Check
+.\Connect-MMSAVDHYB04Arc.ps1 -Action Register -WhatIf
+# Explicit manual step, when ready to create the Arc resource:
+.\Connect-MMSAVDHYB04Arc.ps1 -Action Register -Confirm
+```
+
+`Check`/`-WhatIf` validate **local** prerequisites only; neither signs in or checks Azure. `Register -Confirm` installs the staged agent if needed and starts an interactive **device-code** sign-in for the exact `MMS-AVDHYB-04` Arc resource in this lab's subscription/RG/`westus3`. The operator needs Azure Arc onboarding permission on that scope and must complete sign-in themselves; never share a device code in chat. Verify the resulting exact resource in Azure Arc after the local `ConnectedLocal` response. This script does **not** add an AVD extension or assign `-04` to either host pool. Leave the separate Live-registration PS1 restricted to `-01/-02`.
+
 **Required in the lab before the session**
 
 - [ ] The **Live** standard pool still has **zero** session hosts; the **Ready** standard pool has exactly `MMS-AVDHYB-03.AD.Mauvlan.Net` reporting Available. Session Host Configuration is not an option for Hybrid pools.
