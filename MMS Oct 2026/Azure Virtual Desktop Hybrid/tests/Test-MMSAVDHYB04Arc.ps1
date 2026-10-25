@@ -50,7 +50,10 @@ Test 'local collector reads exact guest/installer evidence even under inherited 
         if($ClassName -eq 'Win32_ComputerSystemProduct'){return @{UUID='49563447-D6F9-44AA-B7A9-C240FF2D8C2F'}}
         return @{Name='MMS-AVDHYB-04';Domain='AD.Mauvlan.Net';PartOfDomain=$true}
     }
-    function Test-ComputerSecureChannel { [CmdletBinding(SupportsShouldProcess=$true)] param(); return (-not $WhatIfPreference) }
+    function Test-ComputerSecureChannel { [CmdletBinding(SupportsShouldProcess=$true)] param()
+        if($ConfirmPreference -ne 'None'){throw 'LOCAL_CONFIRM_LEAK_SECURE_CHANNEL'}
+        return (-not $WhatIfPreference)
+    }
     function Read-Arc04Native { "AzureAdJoined : YES`nDomainJoined : YES`nTenantId : 280bf3c4-6674-481d-907a-2e873c775e72" }
     function Get-Service { $null }
     function Get-Item { @{Length=117747712} }
@@ -60,17 +63,19 @@ Test 'local collector reads exact guest/installer evidence even under inherited 
     $script:cimImported=$false
     function Import-Module { [CmdletBinding()] param([string]$Name)
         if($WhatIfPreference){throw 'CIM_IMPORT_SUPPRESSED'}
+        if($ConfirmPreference -ne 'None'){throw 'LOCAL_CONFIRM_LEAK_MODULE'}
         Assert ($Name -eq 'CimCmdlets') 'Unexpected module import'
         $script:cimImported=$true
     }
-    $WhatIfPreference=$true
+    $priorConfirm=$ConfirmPreference;$ConfirmPreference='Low';$WhatIfPreference=$true
     try {
         $e=Get-Arc04LocalEvidence
         Assert ($e.SecureChannel -eq $true -and $e.Name -eq 'MMS-AVDHYB-04') 'Local evidence missing under WhatIf'
         Assert $script:cimImported 'CimCmdlets was not loaded without inherited WhatIf noise'
+        Assert ($ConfirmPreference -eq 'Low') 'Local preflight changed caller confirmation policy'
         $t=Get-Arc04Target $e.Name $e.Uuid
         Assert ((Assert-Arc04Local $e $t).State -eq 'ReadyForManualConnection') 'Collector did not produce valid evidence'
-    } finally {$WhatIfPreference=$false}
+    } finally {$WhatIfPreference=$false;$ConfirmPreference=$priorConfirm}
 }
 Test 'Check and Register WhatIf are distinct local-only outputs with no installer or login' {
     function Get-Arc04LocalEvidence { New-Arc04Evidence }
@@ -92,11 +97,24 @@ Test 'explicit Register verifies again after install before interactive Arc conn
         }
         return $e
     }
+    function Test-Arc04Elevation { return $true }
     function Install-Arc04Agent { param($Target);$script:steps+='install' }
     function Connect-Arc04 { param($Target);$script:steps+='connect';return [pscustomobject]@{State='ConnectedLocal';Name=$Target.Name;ArcId=$Target.ArcId} }
     $result=Invoke-Arc04 -Action Register -Confirm:$false
     Assert ($result.State -eq 'ConnectedLocal') 'Register did not return the verified local result'
     Assert (($script:steps -join ',') -eq 'read,install,read,connect') ('Unexpected sequence: '+($script:steps -join ','))
+}
+Test 'Register refuses a non-elevated operator before invoking the Arc CLI' {
+    function Get-Arc04LocalEvidence {
+        $e=New-Arc04Evidence
+        $e.Arc=[pscustomobject]@{Status='Disconnected';ResourceId='';VmUuid='';TenantId=''}
+        return $e
+    }
+    function Test-Arc04Elevation { return $false }
+    function Install-Arc04Agent { throw 'UNEXPECTED_INSTALL' }
+    function Connect-Arc04 { throw 'UNEXPECTED_CONNECT' }
+    Assert ((Invoke-Arc04 -Action Check).State -eq 'ReadyForManualConnection') 'Read-only Check should still work'
+    Reject { Invoke-Arc04 -Action Register -Confirm:$false } 'elevated|Administrator'
 }
 Test 'installer execution uses the pinned Microsoft MSI silently without reboot and checks service' {
     $t=Get-Arc04Target 'MMS-AVDHYB-04' '49563447-D6F9-44AA-B7A9-C240FF2D8C2F'

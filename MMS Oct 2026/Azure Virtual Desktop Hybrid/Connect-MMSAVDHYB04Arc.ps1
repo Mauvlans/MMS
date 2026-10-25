@@ -58,6 +58,12 @@ function Assert-Arc04Local($Evidence, $Target) {
     return [pscustomobject]@{State='ReadyForManualConnection';Name=$Target.Name;Vmid=$Target.Vmid;ArcId=$Target.ArcId;InstallRequired=($null -eq $Evidence.Arc)}
 }
 
+function Test-Arc04Elevation {
+    $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal=[Security.Principal.WindowsPrincipal]::new($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
 function Read-Arc04Native([string]$Path, [string[]]$Arguments) {
     try {
         $output = & $Path @Arguments 2>&1 | Out-String
@@ -67,6 +73,11 @@ function Read-Arc04Native([string]$Path, [string[]]$Arguments) {
 }
 
 function Get-Arc04LocalEvidence {
+    # -Confirm on Register must apply only to the one Arc connection decision,
+    # not to read-only CIM import and secure-channel checks.
+    $priorConfirm=$ConfirmPreference
+    try {
+    $ConfirmPreference='None'
     # CIM's module import defines local aliases; inherit WhatIf for the actual
     # preflight but clear it only while loading this built-in local module.
     $priorWhatIf=$WhatIfPreference
@@ -104,6 +115,7 @@ function Get-Arc04LocalEvidence {
         Msi=[pscustomobject]@{Exists=$true;Size=$item.Length;Signature=$signature.Status.ToString()
             Signer=$signature.SignerCertificate.Subject;Sha256=$hash.Hash};Arc=$arc
     }
+    } finally { $ConfirmPreference=$priorConfirm }
 }
 
 function Install-Arc04Agent($Target) {
@@ -161,6 +173,9 @@ function Invoke-Arc04 {
     [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
     param([ValidateSet('Check','Register')][string]$Action='Check')
     $ErrorActionPreference='Stop'
+    if($Action -eq 'Register' -and -not $WhatIfPreference -and -not (Test-Arc04Elevation)) {
+        throw 'Arc registration requires elevated Windows PowerShell (Run as administrator). No installation or connection was attempted.'
+    }
     $evidence=Get-Arc04LocalEvidence
     $target=Get-Arc04Target $evidence.Name $evidence.Uuid
     $state=Assert-Arc04Local $evidence $target
