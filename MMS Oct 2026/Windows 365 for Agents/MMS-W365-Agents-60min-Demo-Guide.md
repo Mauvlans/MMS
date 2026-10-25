@@ -1,10 +1,25 @@
 # Demo Guide — Windows 365 for Agents: The Cloud PC as the Secure Runtime for AI + Human Workloads
 
 **Session length:** 60 minutes (MMS format), followed by extended Q&A
-**Demos:** 3 · **Total demo time:** ~26 minutes
-**Companion deck:** `MMS-W365-Agents-60min.pptx`
+**Demos:** 3 · **Total agenda time:** 28 minutes (23 live + 5 debrief)
+**Companion deck:** `MMS-W365-Agents-60min.pptx` — **not in this repository; obtain and verify before MMS**
 
 > All product behaviour below is drawn from Microsoft Learn — *Windows 365 for Agents* (Introduction, Architecture overview, Agent session lifecycle, Cloud PC agent pools, Create a provisioning policy (agents), Identity and security, Agent authentication model, MCP tool overview). Verify against the current docs before you present; this space moves fast.
+
+> **Readiness: NO-GO for a live three-demo delivery until the gate below passes.**
+>
+> - **Verified:** The separate private [MMS agent repository](https://github.com/Mauvlans/MMS-W365A-Agent/tree/mms-demo) contains the deployed client, scripted Notepad task and screen-share viewer. The MMS billing plan and pre-provisioned pool are active with two free sessions; the agent user is assigned. Teams replied and a real `START MMS` acquired a Cloud PC.
+> - **Blocked:** The first rehearsal stopped safely at an unexpected Edge profile sign-in prompt before Notepad. Watch live human sign-in failed `AADSTS82018` because the viewer used the agent blueprint as an interactive OIDC client. `CANCEL MMS` invoked EndSession and revoked the viewer ticket; the presenter reports two available sessions again. Takeover and Demo 2's Conditional Access denial/allow remain unverified. The deck and offline recordings are still absent.
+> - **Integration:** The partner-session REST contract on [Microsoft Learn](https://learn.microsoft.com/en-us/windows-365/agents/mcp-tool-overview) and the Agent 365 tooling-gateway (ATG) contract in [Microsoft's developer repository](https://github.com/microsoft/windows-365-for-agents/blob/main/docs/api-reference.md) are different paths. This script uses **ATG**; do not mix it with partner REST checkout headers. If the actual client changes to partner REST, replace and rehearse Demo 3 as a unit.
+
+### Go / no-go gate (presenter signs off after a full rehearsal)
+
+- [ ] Put the actual deck at the referenced path; compare slide order, titles, and durations with the run-of-show.
+- [ ] Identify the real demo tenant and confirm licenses (Agent 365, Windows Enterprise E3+, Intune, Entra ID P1), billing enabled, agent user, blueprint permissions/consent/inheritance, and a **separate** healthy pre-provisioned pool with free sessions. Do not use the new live-created pool as the fallback.
+- [ ] Verify the deployed [MMS Agent 365 client](https://github.com/Mauvlans/MMS-W365A-Agent/blob/mms-demo/MMS-DEMO.md) on a new live turn: Teams reply and MCP `StartSession`/native desktop actions already worked, but the fixed Notepad task and presenter viewer still need a successful rehearsal. Keep the owner and token-refresh method in a private presenter handoff (no secrets in Git).
+- [ ] Confirm `Computer.See` and `Computer.Control` are declared, consented, and inherited by the blueprint; connect the viewer and successfully take/release control on a real session.
+- [ ] Capture a real denial **and** success from a fresh agent-user token acquisition/resource access in an isolated test condition, with matching sign-in-log evidence; do not assume a checkout attempt alone proves Conditional Access.
+- [ ] Run all three demos end-to-end on the presenter rig inside the agenda slots, check in the session, then verify capacity returns. The first Demo 3 attempt was cancelled after Edge sign-in interrupted it; do not use that as a completed run. Record local, token-free MP4 fallbacks and test playback offline.
 
 ---
 
@@ -17,24 +32,25 @@ Complete these **at least 48 hours ahead**. Several steps are slow and cannot be
 | 1 | Microsoft Intune license | Tenant | Required to create a provisioning policy (agents) |
 | 2 | Agent 365 license in the tenant | Tenant | Required for the Intune-created pool path |
 | 3 | Active Windows 365 for Agents billing plan | Microsoft Admin Center | Pools are consumption-billed against this plan |
-| 4 | At least one agent created in Agent 365 | Agent 365 | You assign agents to the pool in Step 2 of the policy wizard |
-| 5 | **A pre-provisioned pool in `Available` state** | Intune admin center | Provisioning takes ~20–30 minutes — you will create one live *and* cut to this one |
-| 6 | An agent user identity in Microsoft Entra | Entra admin center | Used for the Conditional Access demo |
-| 7 | A partner app or script that can call checkout / MCP | Your laptop | Copilot Studio computer use, Project Opal, or your own client |
-| 8 | Entra sign-in logs pre-filtered to the agent identity | Entra admin center | Used to close Demo 2 |
+| 4 | Deployed Agent 365 app, blueprint, agent identity, and agent user | Agent 365 / Entra | Assign the agent user to the pool; verify its runtime can invoke `mcp_W365ComputerUse` before the event |
+| 5 | **A separate pre-provisioned pool in `Available` state, with free sessions** | Intune admin center | Provisioning takes ~20–30 minutes — create a different pool live and cut to this one |
+| 6 | Agent user and isolated CA test condition | Entra / Intune | Pre-capture a real denial/success and verify the log shows the targeted agent user and resource |
+| 7 | Working Agent 365 app and screen-share viewer | Your laptop / deployed app | The official [Playground sample](https://github.com/microsoft/windows-365-for-agents/tree/main/W365A-Playground-Agent) is a starting point, **not** an already-running demo; supply a launchable instance and scripted task |
+| 8 | Blueprint MCP and ARI permissions | Agent 365 / Entra | `Tools.ListInvoke.All` for the W365 MCP server, plus separate `Computer.See` and `Computer.Control` grants/inheritance for viewing and takeover |
+| 9 | Entra sign-in logs pre-filtered to the agent user | Entra admin center | Used to close Demo 2 |
 
 **Speaker rig**
-- Two browser profiles side by side: **Admin** (Intune, Entra) and **Maker/Agent** (Copilot Studio or your client app).
+- Two browser profiles side by side: **Admin** (Intune, Entra) and **Agent** (your deployed Agent 365 client and viewer). Copilot Studio/Opal pool creation is a different product path; do not substitute it mid-demo.
 - Sign in to every portal in advance; park each on the exact blade you will open.
 - ZoomIt installed and tested. The MMS crowd will ask you to use it — use it before they ask.
 - Screen resolution 1920×1080. Browser zoom 125% for portal blades, 150% for anything JSON.
 - Network fallback: phone hotspot paired and tested.
 
 **Recording insurance (do this — it is the difference between a good session and a bad one)**
-Record a clean run of every demo the day before, as a full-screen MP4 with no audio. If any live step stalls, narrate over the recording and keep moving. Announce it plainly if you switch — the audience respects it.
+Record a clean run of every demo the day before, as a full-screen MP4 with no audio and no visible tokens. Test local playback without conference Wi-Fi. If any live step stalls, narrate over the recording and keep moving. Announce it plainly if you switch — the audience respects it.
 
 **Safety and hygiene**
-- Use a demo tenant, never production.
+- Use dedicated MMS identities, pool and app in this shared tenant; never alter the existing Ignite HOL pool or shared billing plan to make an MMS step pass. Treat every live-created pool as additional billable capacity and retire only the exact MMS-created pool after the event.
 - Redact tenant IDs, object IDs, and bearer tokens on screen. Blur or use a scratch tenant.
 - Never paste a real token into a slide, a chat, or a shared doc.
 
@@ -62,13 +78,13 @@ Mirrors the **"60-Minute Agenda"** table slide in the deck.
 ---
 
 ## Demo 1 — Stand up a Cloud PC agent pool
-**Deck slide:** "Demo 1 – Stand Up a Cloud PC Agent Pool" · **Time budget:** 8 minutes live + 2 minute debrief
+**Deck slide:** "Demo 1 – Stand Up a Cloud PC Agent Pool" · **Time budget:** 8 minutes live + 2 minute debrief (18–28)
 **Proves:** Takeaway 1 — a Cloud PC gives agents a managed, Entra-joined, Intune-enrolled execution environment, provisioned by policy rather than by hand.
 
 ### Setup checklist
 - [ ] Intune admin center open at **Devices → Provision Cloud PCs**
 - [ ] At least one Agent 365 agent exists and is ready to assign
-- [ ] Second tab already showing the **pre-provisioned pool** in `Available` state
+- [ ] Second tab already showing a **separate pre-provisioned pool** in `Available` state with at least one free session
 - [ ] Billing plan and geography chosen in advance so you do not hunt for them live
 
 ### Steps
@@ -88,7 +104,7 @@ Mirrors the **"60-Minute Agenda"** table slide in the deck.
 6. **Configuration page.** Choose **Language & region** → **Next**.
 7. **Scope tags page.** Add a scope tag if you use delegated admin → **Next**.
    - *Talk track:* "Scope tags are how you keep the finance agent pool out of the hands of the HR admin."
-8. **Review + create** → **Create**.
+8. **Review + create.** Creating this **second** pool adds billable always-available Cloud PCs on top of `MMS-W365A-Ready`. Only select **Create** if the additional cost and exact-ID cleanup owner have been approved; otherwise stop on the review screen, explain the shape, and cut to the ready pool without creating another one.
 9. **Cut to the pre-provisioned pool.** Say it out loud: "Provisioning takes 20 to 30 minutes, so here is one I made earlier."
 10. Open the pre-provisioned policy and show:
     - **Pool status** — `Available` (mention the other values: Creating, Updating, Available with warning, Failed, Deleting — status is evaluated **at pool level, not per Cloud PC**).
@@ -109,30 +125,32 @@ Mirrors the **"60-Minute Agenda"** table slide in the deck.
 ---
 
 ## Demo 2 — Govern the agent identity
-**Deck slide:** "Demo 2 – Govern the Agent Identity" · **Time budget:** 10 minutes live + 2 minute debrief
+**Deck slide:** "Demo 2 – Govern the Agent Identity" · **Time budget:** 8 minutes live + 2 minute debrief (36–46)
 **Proves:** Takeaway 2 — identity, isolation, governance, and policy enforcement are design decisions you make before you scale.
 
 ### Setup checklist
 - [ ] Entra admin center open, agent user identity located in advance
-- [ ] A Conditional Access policy drafted in **Report-only** mode, ready to flip
-- [ ] A sign-in log filter saved or bookmarked for the agent identity
-- [ ] Your client app ready to attempt a checkout on demand
+- [ ] An isolated agent-user Conditional Access policy in **Report-only** mode, with the targeted resource and endpoint condition already verified
+- [ ] A real blocked **and** allowed resource-access/token event recorded during rehearsal, with sign-in logs filtered to the agent **user** and application/resource
+- [ ] Healthy demo agent and pool are out of scope of any live policy changes
 
 ### Steps
 
-1. **Show the identity (3 min).** In the Entra admin center, open the **agent user identity**.
+1. **Show the identity (2 min).** In the Entra admin center, open the **agent user identity**.
    - *Talk track:* "This is not a service account someone shared. Each agent uses a dedicated Microsoft Entra agent user identity, separate from human users. Agents never reuse or impersonate user credentials."
    - Show that resource access is **explicitly assigned to the agent identity**, and that lifecycle — creation, disablement, auditing — is managed centrally in Agent 365.
-2. **Show the four enforcement gates (2 min).** Narrate against the deck's "Four Enforcement Gates" diagram while you click:
+2. **Show the four enforcement gates (1 min).** Narrate against the deck's "Four Enforcement Gates" diagram while you click:
    - Identity control (Entra) → Pool assignment (Intune) → Session establishment (Conditional Access) → Resource access (downstream policy).
-3. **Conditional Access on an agent (5 min).** Open **Protection → Conditional Access** and walk your policy scoped to the agent identity:
-   - **Users:** the agent user identity.
-   - **Grant:** require device compliance.
-   - *Talk track:* "Conditional Access treats the agent user identity just like a human user. Access is evaluated in real time on identity and contextual signals, and can be allowed, restricted, or blocked based on risk."
-4. **Demonstrate a block (3 min).** With the policy in enforce mode and a deliberately non-compliant condition, trigger a checkout from your client app. Show the failure.
-   - *Talk track:* "You can explicitly block risky or unapproved agents. That is the control most agent platforms simply do not have."
-5. **Demonstrate the allowed path (2 min).** Correct the condition (or scope the policy back), retry, and show a successful checkout.
-6. **Close on the sign-in log.** Filter Entra sign-in logs to the agent identity and show both the block and the success.
+3. **Conditional Access on an agent user (2 min).** Open **Entra ID → Conditional Access → Policies** and walk the pre-staged policy. The agent identity and the agent user are *different token subjects*; a policy targeting one does not automatically cover the other.
+   - **Assignments → Users, agents, or workload identities → Agents:** select the isolated **agent user (Preview)**, not the ordinary Users picker.
+   - **Target resources:** name the actual app/resource whose token request you measured.
+   - **Conditions → Agent execution environments (Preview):** include agent-user sessions initiated from endpoints.
+   - **Grant:** require device marked compliant; assign a real Intune compliance policy to the test Cloud PC group and verify its evaluated state first.
+   - *Talk track:* "The policy is applied to the agent user's token for this resource. The agent identity's own tokens need a separately scoped policy."
+4. **Show the rehearsed block (1 min).** Show the saved failed token/resource-access event and the corresponding sign-in-log entry. Do not flip the live policy or claim that replaying an already-issued token/checkout must fail; CA evaluates on token issuance or refresh.
+   - *Talk track:* "This specific agent-user request was denied by the policy; the log shows which resource and condition were evaluated."
+5. **Show the rehearsed allowed path (1 min).** Show the matched successful event on a compliant Cloud PC or an explicitly excluded test condition; explain the difference.
+6. **Close on the sign-in log (1 min).** Show both correlated events and their policy evaluations; do not describe a report-only result as an enforced block.
    - *Talk track:* "Authentication is re-established on every connection. Identity is bound to the session, not the device — and session tokens are cryptographically bound to the device, so they cannot be replayed elsewhere."
 
 ### Landing line
@@ -141,48 +159,38 @@ Mirrors the **"60-Minute Agenda"** table slide in the deck.
 ### Failure modes and fallbacks
 | If this happens | Do this |
 |---|---|
-| CA policy takes time to take effect | Have the block pre-triggered and shown from the sign-in log instead of live |
+| CA policy or token propagation takes time | Use the *previously verified* enforced block and matching sign-in-log entry; never call a report-only evaluation a block |
 | Sign-in log lag | Logs can take minutes; use a pre-filtered view captured earlier and say so |
 | You cannot show a real block safely | Walk the policy config and show a prior log entry — the config is the teaching moment |
 
 ---
 
 ## Demo 3 — Watch an agent work, then take control
-**Deck slide:** "Demo 3 – Watch an Agent Work, Then Take Control" · **Time budget:** 8 minutes live + 2 minute debrief
+**Deck slide:** "Demo 3 – Watch an Agent Work, Then Take Control" · **Time budget:** 7 minutes live + 1 minute debrief (46–54)
 **Proves:** Takeaways 1 and 3 — the Cloud PC is a real, driveable desktop, and human supervision happens inside the same session.
 
 This is the emotional centre of the session. Do not rush it, and do not talk over the moment the agent starts clicking.
 
 ### Setup checklist
 - [ ] Pool in `Available` state with at least one free session
-- [ ] Client app (Copilot Studio computer use, Project Opal, or your own MCP client) authenticated and ready
-- [ ] A scripted task that is visual, deterministic, and finishes in under 3 minutes — e.g. open a browser, sign in to an internal web app with SSO, pull a record, save a file
-- [ ] Screen-share viewer page loaded and ready to connect
-- [ ] Session token acquired and **not** visible on screen
+- [ ] The deployed Agent 365 app/client is authenticated with an **agent-user bearer token** for the W365 MCP server; its actual `StartSession`, `GetSessionDetails`, `EndSession` tools were discovered and rehearsed
+- [ ] A scripted task that is visual and deterministic, with a deliberate pause for the human takeover before completion; the post-handoff finish fits inside 2 minutes
+- [ ] The pinned Playground Agent's `/screenshare` viewer works from its **Watch live** Teams card; configure public HTTPS origin, viewer OIDC sign-in, allowed tenant, and a resolvable human owner of the agent instance
+- [ ] Separate screen-share token has `Computer.See` and `Computer.Control`; the blueprint has ARI grants and inheritance; neither token is visible on screen
 
 ### Steps
 
-1. **Acquire (1 min).** Trigger checkout from your client app.
-   - Endpoint: `POST /api/pools/{poolId}/sessions?api-version=2.0`
-   - Pass the **`x-ms-sessionId`** header (a UUID v4) as an **idempotency key** so a retry does not allocate a second session.
-   - For an agent-driven session, pass `x-ms-authorization-auxiliary` (the agent identity token) plus `user-object-id` (the agent user ID). Without the auxiliary token you get a `HumanUser` session instead.
-   - Show the response fields: **`sessionId`**, **`status`**, **`computerUrl`**, **`screenshareUrl`**. Note `connectivityUrl` may be null — do not depend on it.
-   - *Talk track:* "Checkout can take up to 30 seconds while a device is assigned. Design your orchestrator to wait, not to retry aggressively."
-2. **Connect (1 min).** Point the MCP client at `{computerUrl}/mcp?api-version=1.0`, including the **`x-ms-computerId`** header.
-   - Complete the MCP handshake: `initialize` → `initialized` notification → `tools/list`.
-   - Show the returned tool catalogue on screen — desktop interaction (mouse, keyboard, screenshot), window management, command execution, browser automation, UI accessibility.
-   - *Talk track:* "This is open Model Context Protocol. Any MCP-capable agent can discover and drive this Cloud PC with no custom integration."
-3. **Observe (1 min).** Mount the screen-share viewer against `screenshareUrl` and connect.
-   ```
-   viewer = new ScreenShareViewer({ container, baseUrl: computerUrl, computerId });
-   viewer.connect(bearerToken);
-   ```
+1. **Acquire and wait for Ready (up to 1 min, rehearsed).** Have the deployed Agent 365 app call `StartSession` through the `mcp_W365ComputerUse` server on the A365 tooling gateway. Reuse the **same idempotency key** on a timed-out retry, not a new allocation. Poll `GetSessionDetails` every 2–5 seconds until `Ready` (or cut to recording if it fails the rehearsed timeout). The Playground sample captures `screenShareUrl` from the result; confirm its viewer offer actually arrives. Its initial screenshot is best-effort, **not** a substitute for a Ready gate.
+   - *Talk track:* "Allocation can take up to 30 seconds. Acquired is not ready; the agent waits before sending input."
+2. **Connect (1 min).** Show the actual `mcp_W365ComputerUse` tools from the live A365 SDK client (`initialize` → `tools/list` → `tools/call` is handled by the SDK). The gateway URL and the `Mcp-Session-Id` are client/SDK concerns, not the partner REST `/api/pools/...` and `x-ms-sessionId` headers.
+   - *Talk track:* "This is MCP behind Agent 365 identity, blueprint authorization, and the tooling gateway — not an anonymous MCP endpoint any client can simply point at."
+3. **Observe (1 min).** Click the sample's **Watch live** card, sign in as the human owner, and open its built-in `/screenshare` page. It redeems a short-lived ticket and connects with an ARI token. The sample's pinned `screenshare-sdk/1.0.0` uses `new ScreenShareViewer({ container, computerUrl, viewerUrl, mode: 'interactive' })`, with a non-empty `api-version` on `computerUrl`. **Do not use the `sessionLink` constructor shown in the generic developer doc with this pinned bundle**; the bundle rejects it.
    - *Talk track:* "Same Cloud PC, same session. The human channel is parallel to the agent channel — there is no second environment to provision."
-4. **Act (3 min).** Let the agent run the scripted task. **Stop talking and let the room watch.**
+4. **Act and pause (2 min).** Let the agent start the scripted task, then pause it at the prearranged correction point while it is still running. **Stop talking and let the room watch.**
    - Then narrate the loop: observe → act → observe. Point out that the platform mediates each action, enforces the session identity, applies guardrails, and records what happened.
-5. **Take control (1 min).** Call `viewer.takeControl()` mid-task, do something obviously human — type a correction, close a dialog — then `viewer.releaseControl()` and let the agent resume.
+5. **Take control and finish (1 min).** Call `viewer.takeControl()` at the pause, do something obviously human — type a correction, close a dialog — then `viewer.releaseControl()` and let the agent finish.
    - *Talk track:* "The most recent caller always wins. That is your break-glass path when an agent hits something it should not decide alone."
-6. **Release (1 min).** Check in explicitly: `DELETE /api/sessions/{sessionId}?api-version=2.0` with the matching `x-ms-sessionId` header. A **204 No Content** means the release was accepted; cleanup completes asynchronously.
+6. **Release (1 min).** Have the client call `EndSession` through the same A365 MCP server. The release is accepted before asynchronous reset finishes; verify session capacity later rather than promising it returned instantly.
    - *Talk track:* "Channels close, the Cloud PC resets, billing finalises, capacity returns. If the Cloud PC failed a health check during the session, it is quarantined and replaced rather than reused."
 
 ### Points to make out loud while it runs
@@ -194,11 +202,11 @@ This is the emotional centre of the session. Do not rush it, and do not talk ove
 ### Failure modes and fallbacks
 | If this happens | Do this |
 |---|---|
-| `TOKEN_EXPIRED` in the viewer | Call `viewer.updateToken(newToken)` — do it live, it is a good teaching moment |
-| `START_FAILED` | Check `computerId` and pool registration; cut to the recording |
+| `TOKEN_EXPIRED` in the sample viewer | Its current UI ends the view; return to Teams and ask the agent to offer a fresh share. Do not promise a live `updateToken` path that this page does not expose |
+| `START_FAILED` | Check the versioned `computerUrl`, viewer CDN, and that the Cloud PC is still acquired; cut to the recording |
 | `JOIN_FAILED` | Retry with a fresh token |
 | `RECONNECT_FAILED` | `viewer.stop()`, create a new viewer, reconnect with a fresh token |
-| `MODE_RESTRICTED` on takeControl | The viewer was created in `viewOnly` mode — recreate with `mode: 'interactive'` |
+| `MODE_RESTRICTED` on takeControl | Recreate the viewer in `interactive` mode; also verify `Computer.Control` consent/inheritance if authorization fails |
 | Checkout returns no capacity | Show `Available sessions` in Intune and turn it into the capacity-planning point |
 | Agent task goes off the rails | Take control live. This is a feature, not a failure — say so |
 
@@ -228,15 +236,10 @@ Not scripted into the 60-minute run, but keep this ready as a Q&A answer or a bo
 
 ---
 
-## Reference links
+## Reference links and contract boundary
 
-- Microsoft Learn — What is Windows 365 for Agents
-- Microsoft Learn — Architecture overview
-- Microsoft Learn — Agent session lifecycle
-- Microsoft Learn — Cloud PC agent pools
-- Microsoft Learn — Create a provisioning policy (agents)
-- Microsoft Learn — Identity and security in Windows 365 for Agents
-- Microsoft Learn — Agent authentication model
-- Microsoft Learn — MCP tool overview for Windows 365 for Agents
-
-All live under `learn.microsoft.com/windows-365/agents`.
+- [What is Windows 365 for Agents](https://learn.microsoft.com/en-us/windows-365/agents/introduction-windows-365-for-agents) · [Agent session lifecycle](https://learn.microsoft.com/en-us/windows-365/agents/agent-session-lifecycle) · [Cloud PC agent pools](https://learn.microsoft.com/en-us/windows-365/agents/cloud-pc-agent-pools) · [Create a provisioning policy (agents)](https://learn.microsoft.com/en-us/windows-365/agents/create-provisioning-policy-agents)
+- [Conditional Access for agent users](https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-agent-user) — distinct from policies targeting agent identities; agent-user targeting and execution-environment condition are Preview.
+- [A365 developer getting started](https://github.com/microsoft/windows-365-for-agents/blob/main/docs/getting-started.md) · [ATG API reference](https://github.com/microsoft/windows-365-for-agents/blob/main/docs/api-reference.md) · [ATG authentication](https://github.com/microsoft/windows-365-for-agents/blob/main/docs/authentication.md) · [Playground viewer source](https://github.com/microsoft/windows-365-for-agents/blob/main/W365A-Playground-Agent/src/Screenshare/ScreenshareViewerPage.cs). The generic [screen-sharing guide](https://github.com/microsoft/windows-365-for-agents/blob/main/docs/screen-sharing.md) describes a different constructor: trust the versioned CDN bundle actually loaded by the sample and validate its API before stage use.
+- [Microsoft Learn partner-session API overview](https://learn.microsoft.com/en-us/windows-365/agents/mcp-tool-overview) documents **another** checkout/MCP/check-in surface (`/api/pools/...`, `x-ms-sessionId`, `{computerUrl}/mcp`, `baseUrl`/`computerId`). It is **not** the A365 ATG flow scripted above. If your actual client implements this path, verify its availability, token exchange, viewer bundle, and full session on the demo tenant and revise Demo 3 coherently.
+- [What's new](https://learn.microsoft.com/en-us/windows-365/agents/whats-new): W365 for Agents GA; compliance CA shipped, while agent-user targeting and endpoint condition remain documented as Preview on the Entra page above.
