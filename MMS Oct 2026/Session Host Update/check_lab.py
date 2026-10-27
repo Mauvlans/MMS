@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -17,7 +16,8 @@ AVD = f"https://management.azure.com{PREFIX}/providers/Microsoft.DesktopVirtuali
 API = "2025-04-01-preview"
 EXPECTED = {"hp-mms-demo": 4, "hp-mms-change": 1, "hp-mms-cli": 1, "hp-mms-history": 1}
 LOGS = {"Checkpoint", "Error", "SessionHostManagement"}
-RUNBOOK = Path(__file__).with_name("Session-Host-Update-Demo-Runbook.md")
+QUERY_DIR = Path(__file__).with_name("demos")
+QUERIES = {"successful updates": "05-success.kql", "failed update errors": "05-errors.kql"}
 
 
 def az(*args: str) -> Any:
@@ -86,9 +86,11 @@ def main() -> int:
     workspace = get(f"https://management.azure.com{PREFIX}/providers/Microsoft.OperationalInsights/"
                     "workspaces/law-MMS-SessionHostUpdate?api-version=2022-10-01")
     workspace_id = workspace["properties"]["customerId"]
-    kusto = re.findall(r"```kusto\n(.*?)\n```", RUNBOOK.read_text(), flags=re.S)
-    result.append(gate(len(kusto) == 2, "runbook queries", f"{len(kusto)} found"))
-    for label, query in zip(("successful updates", "failed update errors"), kusto):
+    for label, filename in QUERIES.items():
+        query = (QUERY_DIR / filename).read_text().strip()
+        result.append(gate(bool(query), "Kusto query " + filename, f"{len(query)} characters"))
+        if not query:
+            continue
         url = f"https://api.loganalytics.io/v1/workspaces/{workspace_id}/query?" + urlencode({"query": query})
         try:
             data = az("rest", "--method", "get", "--resource", "https://api.loganalytics.io", "--url", url)

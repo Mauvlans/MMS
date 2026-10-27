@@ -1,0 +1,19 @@
+let timeRange              = ago(30d);
+let provisioningTypeUpdate = "Update";
+WVDSessionHostManagement
+| where ProvisioningStatus in ("Failed", "Error", "Canceled")
+    and TimeGenerated >= timeRange
+    and ProvisioningType == provisioningTypeUpdate
+| summarize arg_max(TimeGenerated, _ResourceId, _SubscriptionId,
+                    FromSessionHostConfigVer, ToSessionHostConfigVer) by CorrelationId
+| join kind = inner (
+    WVDErrors
+    | where TimeGenerated >= timeRange
+    | extend IsSessionHostResourceIdAvailable = iif(Message startswith "SessionHostResourceId", 1, 0)
+    | extend startIndex = iif(IsSessionHostResourceIdAvailable == 1, indexof(Message, ":") + 1, 0)
+    | extend length     = iif(IsSessionHostResourceIdAvailable == 1, indexof(Message, ";") - startIndex, 0)
+    | extend SessionHostResourceId = iif(IsSessionHostResourceIdAvailable == 1, substring(Message, startIndex, length), "")
+    | project TimeGenerated, CorrelationId, SessionHostResourceId, CodeSymbolic, Message
+) on CorrelationId
+| project TimeGenerated, _ResourceId, CorrelationId, CodeSymbolic,
+          SessionHostResourceId, Message, FromSessionHostConfigVer, ToSessionHostConfigVer
