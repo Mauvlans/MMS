@@ -12,7 +12,9 @@
   Reuses a valid Azure CLI / Az.Accounts context or starts an interactive
   device-code login if the context is missing/expired. No password, token or
   registration key is embedded in this file. Azure CLI or Az.Accounts must
-  already be installed on the computer where you run the script.
+  already be installed on the computer where you run the script. Supply the
+  intended subscription via -SubscriptionId or MMS_AVD_HYBRID_SUBSCRIPTION_ID;
+  no live subscription is embedded in this sample.
   Reader on Arc machines/extensions and AVD host pools, plus Graph Device.Read.All
   (or equivalent directory read scope), are needed. A 403 is an ERROR, not absence.
   Windows 11 here is hybrid Entra joined (Graph trustType=ServerAd); it does NOT
@@ -22,7 +24,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet('Staged','AfterLive')][string]$Phase = 'Staged',
-    [string]$SubscriptionId = 'e6ab1306-dfc4-4975-9f15-1df30c4699e2',
+    [string]$SubscriptionId = $env:MMS_AVD_HYBRID_SUBSCRIPTION_ID,
     [string]$ResourceGroup = 'rg-MMS-AVDHybrid-UnderTheHood',
     [string]$LiveHostPool = 'hp-MMS-AVDHybrid-UnderTheHood',
     [string]$ReadyHostPool = 'hp-MMS-AVDHybrid-UnderTheHood-Ready',
@@ -36,6 +38,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if (-not $FixturePath -and $SubscriptionId -notmatch '^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') {
+    throw 'Set MMS_AVD_HYBRID_SUBSCRIPTION_ID or pass -SubscriptionId with the intended lab GUID.'
+}
 $script:checks = New-Object 'System.Collections.Generic.List[object]'
 $script:authMode = ''
 $script:fixture = $null

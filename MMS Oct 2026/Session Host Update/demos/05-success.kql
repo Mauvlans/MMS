@@ -1,0 +1,33 @@
+let timeRange                            = ago(30d);
+let succeededStatus                      = "Succeeded";
+let hostPoolUpdateCompletedCheckpoint    = "HostPoolUpdateCompleted";
+let sessionHostUpdateCompletedCheckpoint = "SessionHostUpdateCompleted";
+let provisioningTypeUpdate               = "Update";
+WVDSessionHostManagement
+| where ProvisioningStatus == succeededStatus
+    and TimeGenerated >= timeRange
+    and ProvisioningType == provisioningTypeUpdate
+| join kind = inner (
+    WVDCheckpoints
+    | where Name == hostPoolUpdateCompletedCheckpoint
+    | extend ParametersParsed = parse_json(Parameters)
+    | extend SessionHostUpdateCount = ParametersParsed["SessionHostsUpdateCompleted"],
+             UpdateCompletionTime   = todatetime(ParametersParsed["TimeCompleted"]),
+             UpdateStartTime        = todatetime(ParametersParsed["TimeStarted"])
+    | project CorrelationId, SessionHostUpdateCount, UpdateStartTime, UpdateCompletionTime
+) on CorrelationId
+| join kind = inner (
+    WVDCheckpoints
+    | where Name == sessionHostUpdateCompletedCheckpoint
+    | extend ParametersParsed = parse_json(Parameters)
+    | extend SessionHostUpdateTime = todecimal(ParametersParsed["TimeTakenToUpdateSessionHostInSeconds"])
+    | summarize SessionHostMedianUpdateTime = percentile(SessionHostUpdateTime, 50) by CorrelationId
+) on CorrelationId
+| project TimeGenerated, _ResourceId, CorrelationId,
+          UpdateStartDateTime = UpdateStartTime,
+          UpdateEndDateTime   = UpdateCompletionTime,
+          ['UpdateDuration [InMinutes]'] = datetime_diff('minute', UpdateCompletionTime, UpdateStartTime),
+          SessionHostUpdateCount,
+          ['MedianSessionHostUpdateTime [InMinutes]'] = toint(SessionHostMedianUpdateTime / (60 * 1.0)),
+          UpdateBatchSize = UpdateMaxVmsRemoved,
+          FromSessionHostConfigVer, ToSessionHostConfigVer, UpdateDeleteOriginalVm
