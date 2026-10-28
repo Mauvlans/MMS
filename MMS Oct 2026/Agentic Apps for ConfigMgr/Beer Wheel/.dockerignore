@@ -1,0 +1,12 @@
+.env
+*.sqlite
+*.sqlite-*
+data/
+__pycache__/
+.pytest_cache/
+backend/.venv/
+frontend/node_modules/
+frontend/test-artifacts/
+*.pyc
+.git/
+*.log
