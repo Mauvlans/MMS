@@ -3,6 +3,9 @@
 Companion to the MMS session deck **Agentic Apps for ConfigMgr: Wait… This Actually Works?**
 Three demos, ~12 minutes each, plus setup, reset, and fallback for every one.
 
+New to Hermes? Start with [Ubuntu/Proxmox + Hermes dev-team onboarding](Hermes-Dev-Team-Onboarding.md).
+That guide sets up a general development assistant; this runbook's ConfigMgr demo is a separate lab workflow.
+
 > Fill in the bracketed values (`[SITE]`, `[COLLECTION]`, …) with your own lab values before the
 > session. Nothing here assumes a specific tenant or site — but every command assumes you have
 > already stood up the lab in **Section 0**.
