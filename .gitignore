@@ -1,0 +1,11 @@
+# Lab-specific IDs and private presenter state must never enter source control.
+.env
+.env.*
+!.env.example
+*.local.env
+*.local.json
+
+# Generated artifacts
+__pycache__/
+*.py[cod]
+*.log

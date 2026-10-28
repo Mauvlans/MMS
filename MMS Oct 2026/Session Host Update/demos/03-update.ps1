@@ -18,12 +18,12 @@
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
 param(
     [ValidateSet('Check', 'Run')]
-    [string]$Action = 'Check'
+    [string]$Action = 'Check',
+    [string]$SubscriptionId = $env:MMS_SUBSCRIPTION_ID,
+    [string]$TenantId = $env:MMS_TENANT_ID
 )
 
 $ErrorActionPreference = 'Stop'
-$SubscriptionId = 'e6ab1306-dfc4-4975-9f15-1df30c4699e2'
-$TenantId = '280bf3c4-6674-481d-907a-2e873c775e72'
 $ResourceGroupName = 'rg-MMS-SessionHostUpdate'
 $HostPoolName = 'hp-mms-cli'
 $HostName = 'hp-mms-cli/MMSCLI-0'
@@ -32,9 +32,13 @@ $TargetDisk = 'Premium_LRS'
 
 # An offline preview must not import modules, prompt for sign-in, or read Azure.
 if ($WhatIfPreference) {
-    Write-Output "PREVIEW ONLY: $Action on $HostPoolName in $ResourceGroupName/$SubscriptionId."
+    Write-Output "PREVIEW ONLY: $Action on $HostPoolName in $ResourceGroupName (subscription/tenant provided at runtime)."
     Write-Output "No module import, Azure authentication, reads, or writes occurred."
     return
+}
+if ($SubscriptionId -notmatch '^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$' -or
+    $TenantId -notmatch '^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') {
+    throw 'Set MMS_SUBSCRIPTION_ID and MMS_TENANT_ID (or pass -SubscriptionId and -TenantId) to the intended lab GUIDs.'
 }
 
 function Assert-MmsBaseline {

@@ -9,7 +9,9 @@
 ```powershell
 Install-Module Az.DesktopVirtualization -RequiredVersion '6.0.1-preview' -AllowPrerelease -Scope CurrentUser -Force
 Import-Module Az.DesktopVirtualization
-Connect-AzAccount -UseDeviceAuthentication -Tenant '280bf3c4-6674-481d-907a-2e873c775e72' -Subscription 'e6ab1306-dfc4-4975-9f15-1df30c4699e2'
+$env:MMS_SUBSCRIPTION_ID = '<your-subscription-guid>' # from private deployment record
+$env:MMS_TENANT_ID = '<your-tenant-guid>'               # never commit actual IDs
+Connect-AzAccount -UseDeviceAuthentication -Tenant $env:MMS_TENANT_ID -Subscription $env:MMS_SUBSCRIPTION_ID
 Get-AzContext | Select-Object Name, Tenant, Subscription
 Get-Command Update-AzWvdSessionHostConfiguration -Syntax
 ```

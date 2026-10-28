@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
-SUB = "e6ab1306-dfc4-4975-9f15-1df30c4699e2"
+SUB = os.environ.get("MMS_SUBSCRIPTION_ID", "").strip()
+TENANT = os.environ.get("MMS_TENANT_ID", "").strip()
 RG = "rg-MMS-SessionHostUpdate"
 PREFIX = f"/subscriptions/{SUB}/resourceGroups/{RG}"
 AVD = f"https://management.azure.com{PREFIX}/providers/Microsoft.DesktopVirtualization"
@@ -47,8 +50,14 @@ def gate(ok: bool, name: str, reason: str) -> bool:
 
 def main() -> int:
     result = []
+    guid = r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"
+    if not re.fullmatch(guid, SUB) or not re.fullmatch(guid, TENANT):
+        raise RuntimeError("Set MMS_SUBSCRIPTION_ID and MMS_TENANT_ID to the intended lab GUIDs (not committed values).")
     account = az("account", "show")
-    if not gate(account["id"] == SUB, "subscription", account["id"]):
+    correct_account = (account.get("id", "").lower() == SUB.lower()
+                       and account.get("tenantId", "").lower() == TENANT.lower())
+    if not gate(correct_account, "subscription/tenant",
+                "Azure context matches explicitly configured lab" if correct_account else "Azure context mismatch"):
         return 1
     for pool, expected in EXPECTED.items():
         base = f"{AVD}/hostPools/{pool}"

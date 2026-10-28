@@ -7,9 +7,9 @@ Presenters: Adam Nichols, Chris Cavazos · 5 demos · ~44 minutes of demo time i
 
 ## 0. Lab build (do this before you travel)
 
-The isolated lab is in subscription `e6ab1306-dfc4-4975-9f15-1df30c4699e2` (**MSFT - External Sub - Mauvlan**), resource group `rg-MMS-SessionHostUpdate`, region `westus3`. It has three independent live pooled host pools with session host configurations, plus a separate history/failure pool. Do not break a live demo pool to manufacture a failure. The lab hosts are **Microsoft Entra joined**, not AD DS joined; the AD-specific Q&A below describes the supported product behavior, not the lab's own join path.
+The isolated example lab uses the subscription and tenant you explicitly configure with `MMS_SUBSCRIPTION_ID` and `MMS_TENANT_ID`, resource group `rg-MMS-SessionHostUpdate`, region `westus3`. It has three independent live pooled host pools with session host configurations, plus a separate history/failure pool. Do not break a live demo pool to manufacture a failure. The lab hosts are **Microsoft Entra joined**, not AD DS joined; the AD-specific Q&A below describes the supported product behavior, not the lab's own join path.
 
-Lab assets: gallery `galMMSSessionHostUpdate/Win11AVDTrusted` (versions `1.0.0` and `1.1.0`, two West US 3 replicas each), Key Vault `kvmmssessionhostupd`, Log Analytics workspace `law-MMS-SessionHostUpdate`, AVD workspace `ws-MMS-SessionHostUpdate`. VM prefixes are `MMSDEMO`, `MMSCHG`, `MMSCLI`, and `MMSHIST`. The existing `MVN-W3-VNET/AVDHosts` subnet is shared infrastructure; **do not modify its DNS, NSG, or address space for this demo**. All new VMs and their pools belong only to the named lab resource group.
+Lab assets: gallery `galMMSSessionHostUpdate/Win11AVDTrusted` (versions `1.0.0` and `1.1.0`, two West US 3 replicas each), Key Vault `kvmmssessionhostupd`, Log Analytics workspace `law-MMS-SessionHostUpdate`, AVD workspace `ws-MMS-SessionHostUpdate`. VM prefixes are `MMSDEMO`, `MMSCHG`, `MMSCLI`, and `MMSHIST`. The existing lab subnet is shared infrastructure; **do not modify its DNS, NSG, or address space for this demo**. All new VMs and their pools belong only to the named lab resource group.
 
 | Pool | Purpose | Hosts | Notes |
 |---|---|---|---|
@@ -40,10 +40,17 @@ The four excess lab hosts (`MMSDEMO-4`, `MMSDEMO-5`, `MMSCHG-1`, `MMSCLI-1`) wer
 - [ ] Azure Cloud Shell, Log Analytics blade, and **all three** live host-pool blades open in pre-loaded browser tabs.
 - [ ] **Zoom It** installed and tested — MMS audiences will ask for it.
 - [ ] Screen recordings for **each stage-dependent beat**: sign-out notification, portal config change/version warning, PowerShell success, pause/resume, failed/retry state, and both Kusto result sets. Store offline on the presentation laptop and play every clip once without network access.
-- [ ] Open the actual `hp-mms-history` workspace and run both queries below: Query A returns a completed update, Query B returns a real failure/error row within retention. If either is empty, use a verified recording instead of claiming live diagnostics.
+- [ ] Open the actual `hp-mms-history` workspace and run both queries linked in Demo 5: Query A returns a completed update, Query B returns a real failure/error row within retention. If either is empty, use a verified recording instead of claiming live diagnostics.
 - [ ] Run a full timed dress rehearsal in the exact demo order and record the subscription ID, pool IDs, module version, query row counts, clip paths, and the time each update reaches initial/batch/terminal status. **Do not mark ready until all five demos and their offline fallbacks pass.**
 
-Run `python3 check_lab.py` from this folder on a machine signed in to the lab subscription with Azure CLI. It reads back the exact host count/status and VM power state in every pool, gallery replication, diagnostic settings, and **runs both embedded Kusto queries**. It exits nonzero on any missing result. A green script is only the *cloud-state* gate; the unchecked presentation/laptop/user-session items above remain mandatory. Do not run it against a different subscription by changing an ambient default.
+Set the **intended** lab IDs from your private deployment record in the presenter's shell; do not commit them or copy another person's IDs into these public examples:
+
+```bash
+export MMS_SUBSCRIPTION_ID='<your-subscription-guid>'
+export MMS_TENANT_ID='<your-tenant-guid>'
+```
+
+Run `python3 check_lab.py` from this folder on a machine signed in to that subscription/tenant with Azure CLI. It verifies both IDs against the Azure context, reads back host count/status and VM power state in every pool, gallery replication, diagnostic settings, and **runs both `.kql` files in `demos/`**. It exits nonzero on any missing result. A green script is only the *cloud-state* gate; the unchecked presentation/laptop/user-session items above remain mandatory. Never derive the intended ID from the currently selected Azure context; that would bypass the wrong-subscription guard.
 
 **Power state between build/rehearsal and MMS:** all **7 session-host VMs** are deliberately **deallocated** to stop compute charges; the two generalized image-source VMs are also deallocated and must **never be started again**. Start the lab well before the session, not on stage:
 
@@ -59,13 +66,13 @@ python3 lab_power.py deallocate  # refuses when any active/disconnected session 
 python3 lab_power.py status      # exits 0 only when all 7 session-host VMs are deallocated
 ```
 
-Both scripts require Azure CLI signed into the named subscription. `check_lab.py` will intentionally fail while the lab is parked; **do not mark the session ready from a deallocated VM**. Verify the two `MMSIMG` source VMs remain deallocated separately; the power script deliberately excludes them.
+Both scripts require Azure CLI signed into the explicitly configured subscription/tenant. If either ID is missing or malformed, they refuse before any Azure reads/writes. `check_lab.py` will intentionally fail while the lab is parked; **do not mark the session ready from a deallocated VM**. Verify the two `MMSIMG` source VMs remain deallocated separately; the power script deliberately excludes them.
 
 **Timing reality check.** A session host takes roughly **20 minutes** to update. For four hosts at batch size two, budget about **60 minutes** (one initial ~20 minutes, then a two-host batch ~20 minutes, then one final host ~20 minutes); each one-host change/CLI pool is roughly **20 minutes**. These are estimates, not guarantees. After demos 1–3 (~26 minutes of demo time, plus slide time), demo 4 might find the update anywhere from the initial host to complete. Pause waits for in-flight work to complete; the portal's ~20-second status refresh is **not** the pause completion time. Use the recording as the *primary* way to show a completed pause/resume and end-to-end update, with the live lab as a bonus.
 
 **Cost/blast-radius note.** Each *executed update* replaces VMs; a view-only walkthrough does not. Keep the pools small, and set `UpdateDeleteOriginalVM = $true` so the old VMs do not linger on the bill. Run only in session-owned lab pools, never an existing production or other-session pool.
 
-**Temporary access and cleanup.** The new lab Key Vault currently has its public endpoint enabled for the AVD service to read local-admin secrets; its *direct vault-level* secret-reader assignments are scoped to the four pool identities (also review inherited tenant/subscription roles). The temporary human **Key Vault Secrets Officer** assignment used to stage those secrets was removed after provisioning. After the rehearsal, test a trusted-services/private-access configuration against a *dedicated* update before narrowing vault networking; do **not** disable the endpoint blindly while the demo updates still need the secrets. The image-source VMs `MMSIMG01` and `MMSIMG02` are generalized/deallocated but their disks and published gallery replicas still incur storage charges. Keep them until image provenance and fallback are confirmed, then remove **only these exact lab-owned resources** after the event; do not delete by name pattern or touch the shared `MVN-Networking` group. The lab vault secrets expire on 2026-11-30 and must be rotated if the lab is kept beyond that date.
+**Temporary access and cleanup.** The lab Key Vault's public endpoint may be needed for AVD to read local-admin secrets; review its current network rules and all inherited and direct roles before presenting. After rehearsal, test a trusted-services/private-access configuration against a *dedicated* update before narrowing vault networking; do **not** disable the endpoint blindly while updates still need the secrets. The image-source VMs `MMSIMG01` and `MMSIMG02` are generalized/deallocated but their disks and published gallery replicas still incur storage charges. Keep them until image provenance and fallback are confirmed, then remove **only these exact lab-owned resources** after the event; do not delete by name pattern or touch the shared networking group. Check vault-secret expiration privately and rotate if the lab is kept beyond it.
 
 ---
 

@@ -5,12 +5,15 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
+import os
+import re
 import subprocess
 import sys
 import time
 from typing import Any
 
-SUB = "e6ab1306-dfc4-4975-9f15-1df30c4699e2"
+SUB = os.environ.get("MMS_SUBSCRIPTION_ID", "").strip()
+TENANT = os.environ.get("MMS_TENANT_ID", "").strip()
 RG = "rg-MMS-SessionHostUpdate"
 EXPECTED = {"hp-mms-demo": 4, "hp-mms-change": 1, "hp-mms-cli": 1, "hp-mms-history": 1}
 BASE = (f"https://management.azure.com/subscriptions/{SUB}/resourceGroups/{RG}"
@@ -25,8 +28,12 @@ def az(*args: str) -> Any:
 
 
 def hosts() -> list[dict]:
-    if az("account", "show")["id"] != SUB:
-        raise RuntimeError("Wrong Azure subscription. Refusing power operation.")
+    guid = r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"
+    if not re.fullmatch(guid, SUB) or not re.fullmatch(guid, TENANT):
+        raise RuntimeError("Set MMS_SUBSCRIPTION_ID and MMS_TENANT_ID to the intended lab GUIDs. Refusing.")
+    account = az("account", "show")
+    if account.get("id", "").lower() != SUB.lower() or account.get("tenantId", "").lower() != TENANT.lower():
+        raise RuntimeError("Wrong Azure subscription or tenant. Refusing power operation.")
     found = []
     for pool, count in EXPECTED.items():
         url = f"{BASE}/{pool}/sessionHosts?api-version=2025-04-01-preview"
