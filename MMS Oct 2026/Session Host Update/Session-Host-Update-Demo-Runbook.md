@@ -1,13 +1,15 @@
 # Session Host Update — MMS Demo Runbook
 
+> **Historical demo — lab retired 2026-10-29 UTC.** The dedicated lab resource group and all its active Azure resources were deleted; the seven lab Entra devices and eight scoped lab-identity assignments on shared networking were removed. The shared network was preserved. The Key Vault remains only as a **soft-deleted**, recoverable record until its scheduled purge in January 2027. Do not execute the live demo or power scripts without rebuilding an isolated lab and revalidating all current prerequisites. See [teardown record](Lab-Teardown.md).
+
 Companion to the session **"Session Host Update: A Better Way to Manage Your AVD Environment"**
 Presenters: Adam Nichols, Chris Cavazos · 5 demos · ~44 minutes of demo time inside a 90-minute slot
 
 ---
 
-## 0. Lab build (do this before you travel)
+## 0. Historical lab build (requires a new deployment before reuse)
 
-The isolated example lab uses the subscription and tenant you explicitly configure with `MMS_SUBSCRIPTION_ID` and `MMS_TENANT_ID`, resource group `rg-MMS-SessionHostUpdate`, region `westus3`. It has three independent live pooled host pools with session host configurations, plus a separate history/failure pool. Do not break a live demo pool to manufacture a failure. The lab hosts are **Microsoft Entra joined**, not AD DS joined; the AD-specific Q&A below describes the supported product behavior, not the lab's own join path.
+The retired example lab used the subscription and tenant configured with `MMS_SUBSCRIPTION_ID` and `MMS_TENANT_ID`, resource group `rg-MMS-SessionHostUpdate`, region `westus3`. It had three independent live pooled host pools with session host configurations, plus a separate history/failure pool. Do not break a live demo pool to manufacture a failure. The lab hosts are **Microsoft Entra joined**, not AD DS joined; the AD-specific Q&A below describes the supported product behavior, not the lab's own join path.
 
 Lab assets: gallery `galMMSSessionHostUpdate/Win11AVDTrusted` (versions `1.0.0` and `1.1.0`, two West US 3 replicas each), Key Vault `kvmmssessionhostupd`, Log Analytics workspace `law-MMS-SessionHostUpdate`, AVD workspace `ws-MMS-SessionHostUpdate`. VM prefixes are `MMSDEMO`, `MMSCHG`, `MMSCLI`, and `MMSHIST`. The existing lab subnet is shared infrastructure; **do not modify its DNS, NSG, or address space for this demo**. All new VMs and their pools belong only to the named lab resource group.
 
@@ -20,9 +22,9 @@ Lab assets: gallery `galMMSSessionHostUpdate/Win11AVDTrusted` (versions `1.0.0` 
 
 **Applied footprint:** **4 + 1 + 1 + 1 = 7 session hosts**. Demo 1 has an initial host, a two-host batch, then a final host (roughly 60 minutes at the 20-minute-per-wave estimate); this does **not** guarantee an in-progress batch when Demo 4 arrives, so capture and verify a pause/resume recording as the primary path **before the event** (still an open readiness gate). A strict six-host footprint (3 + 1 + 1 + 1) would cut Demo 1 to roughly 40 minutes and make that live beat still less likely. The one-host `hp-mms-history` update was exercised successfully, proving a single-host pool can update its sole host, but has zero spare capacity during replacement. Keep separate portal-change, CLI, and history pools: only one update may run or be scheduled per pool.
 
-The four excess lab hosts (`MMSDEMO-4`, `MMSDEMO-5`, `MMSCHG-1`, `MMSCLI-1`) were removed through AVD and their exact VM, 127-GiB Standard SSD OS disk, and NIC were read back absent (**508 GiB of provisioned OS disks removed**). The desired pool counts now match the seven registered hosts. All seven hosts and both generalized image-source VMs remain deallocated. This cuts persistent storage/quota, **not** running compute while parked. Never delete a VM record and assume its disk vanished; read back the exact VM, session-host object, desired instance count, disk, and NIC. The two image-source VMs are separate and were not touched.
+The four excess lab hosts (`MMSDEMO-4`, `MMSDEMO-5`, `MMSCHG-1`, `MMSCLI-1`) were removed through AVD and their exact VM, 127-GiB Standard SSD OS disk, and NIC were read back absent (**508 GiB of provisioned OS disks removed**). Before final teardown the desired counts matched seven registered hosts; all seven and both image-source VMs were then deallocated and deleted with the lab. The earlier scale-in cut persistent storage/quota, **not** running compute while parked. Never delete a VM record and assume its disk vanished; read back the exact VM, session-host object, desired instance count, disk, and NIC. The two image-source VMs were separate and were not touched by that earlier scale-in.
 
-**Required in the lab before the session**
+**Historical readiness record — the checked items below were verified before teardown, not now**
 
 - [x] All three live pools are **pooled/Automated** with a **Succeeded** session host configuration, and **7/7** desired session hosts remain registered after scale-in. The retained hosts had previously reached Available, but are now parked. Confirm the portal shows **Manage session host configuration** on the stage account; API state alone does not prove the blade renders.
 - [ ] After the pre-session startup, read back all **7/7** hosts as **Available** with VMs running; this must be rechecked after scale-in, not inferred from the old 11-host rehearsal.
@@ -52,7 +54,7 @@ export MMS_TENANT_ID='<your-tenant-guid>'
 
 Run `python3 check_lab.py` from this folder on a machine signed in to that subscription/tenant with Azure CLI. It verifies both IDs against the Azure context, reads back host count/status and VM power state in every pool, gallery replication, diagnostic settings, and **runs both `.kql` files in `demos/`**. It exits nonzero on any missing result. A green script is only the *cloud-state* gate; the unchecked presentation/laptop/user-session items above remain mandatory. Never derive the intended ID from the currently selected Azure context; that would bypass the wrong-subscription guard.
 
-**Power state between build/rehearsal and MMS:** all **7 session-host VMs** are deliberately **deallocated** to stop compute charges; the two generalized image-source VMs are also deallocated and must **never be started again**. Start the lab well before the session, not on stage:
+**Historical power commands — do not run against the retired lab.** Before teardown, seven session-host VMs were deallocated between rehearsals to stop compute charges; the two generalized image-source VMs were never restarted. A future, separately rebuilt lab would need to be started well before its session, not on stage:
 
 ```bash
 python3 lab_power.py start      # scopes by exact pool IDs/VM ownership tags; never starts image-source VMs
@@ -72,7 +74,7 @@ Both scripts require Azure CLI signed into the explicitly configured subscriptio
 
 **Cost/blast-radius note.** Each *executed update* replaces VMs; a view-only walkthrough does not. Keep the pools small, and set `UpdateDeleteOriginalVM = $true` so the old VMs do not linger on the bill. Run only in session-owned lab pools, never an existing production or other-session pool.
 
-**Temporary access and cleanup.** The lab Key Vault's public endpoint may be needed for AVD to read local-admin secrets; review its current network rules and all inherited and direct roles before presenting. After rehearsal, test a trusted-services/private-access configuration against a *dedicated* update before narrowing vault networking; do **not** disable the endpoint blindly while updates still need the secrets. The image-source VMs `MMSIMG01` and `MMSIMG02` are generalized/deallocated but their disks and published gallery replicas still incur storage charges. Keep them until image provenance and fallback are confirmed, then remove **only these exact lab-owned resources** after the event; do not delete by name pattern or touch the shared networking group. Check vault-secret expiration privately and rotate if the lab is kept beyond it.
+**Historical access and cleanup.** While the lab ran, its Key Vault public endpoint was enabled for AVD to read local-admin secrets. The final teardown deleted the lab VMs, their disks, gallery replicas, workspace, pools, and vault; the vault is soft-deleted, not purged. The eight exact lab-identity role assignments on the shared VNet/subnet were removed, while the shared networking group and its unrelated assignments were preserved. Do not treat this history as a current access or readiness statement.
 
 ---
 

@@ -24,7 +24,8 @@ def az(*args: str) -> Any:
     p = subprocess.run(["az", *args, "-o", "json"], capture_output=True, text=True, timeout=75)
     if p.returncode:
         raise RuntimeError(p.stderr.strip()[:600])
-    return json.loads(p.stdout)
+    # Azure CLI async power actions may succeed with no JSON on stdout.
+    return json.loads(p.stdout) if p.stdout.strip() else None
 
 
 def hosts() -> list[dict]:
