@@ -1,6 +1,8 @@
 # Session Host Update — stage index
 
-[Common lab preparation, safety gates, and timing](../Session-Host-Update-Demo-Runbook.md). Start the seven **session-host** VMs with the guarded `lab_power.py` and run `check_lab.py` before presenting; **never start the two generalized image-source VMs**. The common prep is not repeated in each cue card.
+> **Retired lab:** the October 2026 Azure lab was torn down. These are historical presenter scripts, not a runnable environment. [Teardown record](../Lab-Teardown.md). Rebuild and revalidate an isolated lab before executing any update or power action.
+
+[Common lab preparation, safety gates, and timing](../Session-Host-Update-Demo-Runbook.md). For any **newly rebuilt** lab, use the guarded `lab_power.py` only after verifying ownership and host counts, then run `check_lab.py` before presenting; **never start generalized image-source VMs**. The common prep is not repeated in each cue card.
 
 1. [Demo 1 — portal update](01-portal-reset.md): start the four-host `hp-mms-demo` update.
 2. [Demo 2 — portal image, size, and disk](02-portal-change.md): use independent `hp-mms-change`.
