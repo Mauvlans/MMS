@@ -1,5 +1,5 @@
 #requires -Version 5.1
-<#+
+<#
 .SYNOPSIS
   Read-only Azure Arc, Entra hybrid join, AVD Arc extension and broker status for
   the MMS AVD Hybrid demo. Does not register machines, install extensions, or
@@ -13,8 +13,8 @@
   device-code login if the context is missing/expired. No password, token or
   registration key is embedded in this file. Azure CLI or Az.Accounts must
   already be installed on the computer where you run the script. Supply the
-  intended subscription via -SubscriptionId or MMS_AVD_HYBRID_SUBSCRIPTION_ID;
-  no live subscription is embedded in this sample.
+  intended lab via -ConfigPath or MMS_AVD_HYBRID_CONFIG;
+  subscription AND tenant are required and checked before inventory reads.
   Reader on Arc machines/extensions and AVD host pools, plus Graph Device.Read.All
   (or equivalent directory read scope), are needed. A 403 is an ERROR, not absence.
   Windows 11 here is hybrid Entra joined (Graph trustType=ServerAd); it does NOT
@@ -24,12 +24,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet('Staged','AfterLive')][string]$Phase = 'Staged',
-    [string]$SubscriptionId = $env:MMS_AVD_HYBRID_SUBSCRIPTION_ID,
-    [string]$ResourceGroup = 'rg-MMS-AVDHybrid-UnderTheHood',
-    [string]$LiveHostPool = 'hp-MMS-AVDHybrid-UnderTheHood',
-    [string]$ReadyHostPool = 'hp-MMS-AVDHybrid-UnderTheHood-Ready',
-    [string[]]$MachineNames = @('MMS-AVDHYB-01','MMS-AVDHYB-02','MMS-AVDHYB-03'),
-    [string]$ExpectedReadyMachine = 'MMS-AVDHYB-03',
+    [string]$ConfigPath = $env:MMS_AVD_HYBRID_CONFIG,
     [ValidateSet('Auto','AzureCLI','AzPowerShell')][string]$Auth = 'Auto',
     [switch]$NoLogin,
     [string]$JsonPath,
@@ -38,9 +33,16 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-if (-not $FixturePath -and $SubscriptionId -notmatch '^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') {
-    throw 'Set MMS_AVD_HYBRID_SUBSCRIPTION_ID or pass -SubscriptionId with the intended lab GUID.'
-}
+. (Join-Path $PSScriptRoot 'MmsAvdHybrid.Config.ps1')
+$script:MmsConfigPath = $ConfigPath
+$config = Get-MmsDemoConfig
+$SubscriptionId = $config.SubscriptionId
+$TenantId = $config.TenantId
+$ResourceGroup = $config.ResourceGroup
+$LiveHostPool = $config.LiveHostPool
+$ReadyHostPool = $config.ReadyHostPool
+$MachineNames = @($config.LiveHosts.Name) + @($config.ReadyHost.Name)
+$ExpectedReadyMachine = $config.ReadyHost.Name
 $script:checks = New-Object 'System.Collections.Generic.List[object]'
 $script:authMode = ''
 $script:fixture = $null
@@ -136,12 +138,25 @@ function Test-CurrentAzureContext {
     # Probe the exact resource type this script will read; a context's subscription
     # name alone does not prove its cached token is still valid.
     $probe = $armRoot + $base + 'Microsoft.HybridCompute/machines/' + [uri]::EscapeDataString($MachineNames[0]) + '?api-version=2024-07-10'
-    try { $null = Get-Http $probe; return $true }
+    try { Assert-StatusAuthority; $null = Get-Http $probe; return $true }
     catch {
         $reason = $_.Exception.Message
         if ($reason -match '401|ExpiredAuthenticationToken|Please run.*login|NoAccessToken') { return $false }
         throw ('Azure read failed (not an authentication prompt): ' + $reason)
     }
+}
+function Assert-StatusAuthority {
+    if ($script:authMode -eq 'AzureCLI') {
+        $raw = & az account show -o json --only-show-errors 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) { throw 'NoAccessToken: Azure CLI context missing.' }
+        $ctx = $raw | ConvertFrom-Json -ErrorAction Stop
+        if ($ctx.id -ne $SubscriptionId -or $ctx.tenantId -ne $TenantId) { throw 'Azure subscription/tenant context mismatch.' }
+    } else {
+        $ctx = Get-AzContext -ErrorAction Stop
+        if (-not $ctx -or $ctx.Subscription.Id -ne $SubscriptionId -or $ctx.Tenant.Id -ne $TenantId) { throw 'Azure subscription/tenant context mismatch.' }
+    }
+    $authority = Get-Http ($armRoot+'/subscriptions/'+$SubscriptionId+'?api-version=2022-12-01')
+    if ($authority.subscriptionId -ne $SubscriptionId -or $authority.tenantId -ne $TenantId) { throw 'ARM subscription/tenant authority mismatch.' }
 }
 function Get-CliSubscription {
     $raw = & az account show --query id -o tsv --only-show-errors 2>&1 | Out-String
@@ -177,13 +192,13 @@ if ($FixturePath) {
         if ($NoLogin) { Write-Error 'No usable Azure sign-in for this subscription (-NoLogin was specified).'; exit 1 }
         if ($script:authMode -eq 'AzureCLI') {
             Write-Host 'Azure sign-in required. Complete the device-code prompt on your own device; do not paste a code into chat.'
-            & az login --use-device-code --only-show-errors
+            & az login --tenant $TenantId --use-device-code --only-show-errors
             if ($LASTEXITCODE -ne 0) { Write-Error 'Azure CLI sign-in did not complete.'; exit 1 }
             $setOutput = & az account set --subscription $SubscriptionId --only-show-errors 2>&1 | Out-String
             if ($LASTEXITCODE -ne 0) { Write-Error ('Signed in, but cannot select subscription ' + $SubscriptionId + ': ' + $setOutput.Trim()); exit 1 }
         } else {
             Write-Host 'Azure sign-in required. Complete the device-code prompt on your own device; do not paste a code into chat.'
-            Connect-AzAccount -UseDeviceAuthentication -Subscription $SubscriptionId -ErrorAction Stop | Out-Host
+            Connect-AzAccount -UseDeviceAuthentication -Tenant $TenantId -Subscription $SubscriptionId -Scope Process -ErrorAction Stop | Out-Host
         }
         if (-not (Test-CurrentAzureContext)) { Write-Error 'Sign-in returned, but an authenticated ARM read still failed. Check the chosen tenant and subscription.'; exit 1 }
     }

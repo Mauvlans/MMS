@@ -20,7 +20,7 @@ exact-target GET. It does not wait for extension completion or broker Available.
 Use Status in the SAME PowerShell process; Status only uses an existing matching
 context and never prompts for sign-in. Exit/close that process when finished.
 
-Ready host 03 and every other hostname/UUID pair are forbidden. Any local AVD
+The configured Ready host and every other hostname/UUID pair are forbidden. Any local AVD
 service/key/extension evidence blocks Check/Register, including stale evidence:
 inspect manually rather than deleting it or forcing an overwrite. Azure 403,
 failed reads and malformed/paginated responses are NOT treated as absence.
@@ -61,31 +61,34 @@ https://learn.microsoft.com/rest/api/desktopvirtualization/host-pools/retrieve-r
 https://learn.microsoft.com/rest/api/hybridcompute/machine-extensions/create-or-update?view=rest-hybridcompute-2024-07-10
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
-param([ValidateSet('Check','Register','Status')][string]$Action = 'Check')
+param([ValidateSet('Check','Register','Status')][string]$Action = 'Check',
+    [string]$ConfigPath = $env:MMS_AVD_HYBRID_CONFIG)
+
+. (Join-Path $PSScriptRoot 'MmsAvdHybrid.Config.ps1')
+$script:MmsConfigPath = $ConfigPath
+$null = Get-MmsDemoConfig # Fail before any guest reads, authentication or writes.
 
 function Get-MmsTarget([string]$Name, [string]$Uuid) {
-    $ids = @{
-        'MMS-AVDHYB-01' = @('81BCC02C-50E3-4ECF-8A86-D5180C42CC7B',122)
-        'MMS-AVDHYB-02' = @('45DA37B2-1BE2-494D-9142-7B6FC78B564A',123)
-    }
-    if (-not $ids.ContainsKey($Name)) { throw 'Host is not on the Live allowlist; Ready and all other hosts are forbidden.' }
-    if ($Uuid -ne $ids[$Name][0]) { throw 'SMBIOS UUID does not match the allowlisted Live VM UUID.' }
-    $subscription = 'e6ab1306-dfc4-4975-9f15-1df30c4699e2'
-    $base = '/subscriptions/' + $subscription + '/resourceGroups/rg-MMS-AVDHybrid-UnderTheHood/providers/'
+    $config = Get-MmsDemoConfig
+    $matches = @($config.LiveHosts | Where-Object { $_.Name -eq $Name })
+    if ($matches.Count -ne 1) { throw 'Host is not on the Live allowlist; Ready and all other hosts are forbidden.' }
+    $hostBinding = $matches[0]
+    if ($Uuid -ne $hostBinding.Uuid) { throw 'SMBIOS UUID does not match the allowlisted Live VM UUID.' }
+    $base = '/subscriptions/' + $config.SubscriptionId + '/resourceGroups/' + $config.ResourceGroup + '/providers/'
     return [pscustomobject]@{
-        Name=$Name; Uuid=$ids[$Name][0]; Vmid=$ids[$Name][1]
-        Subscription=$subscription; Tenant='280bf3c4-6674-481d-907a-2e873c775e72'
-        ArcId=($base + 'Microsoft.HybridCompute/machines/' + $Name)
-        LiveId=($base + 'Microsoft.DesktopVirtualization/hostPools/hp-MMS-AVDHybrid-UnderTheHood')
-        ReadyId=($base + 'Microsoft.DesktopVirtualization/hostPools/hp-MMS-AVDHybrid-UnderTheHood-Ready')
-        Location='westus3'
+        Name=$hostBinding.Name; Uuid=$hostBinding.Uuid; Vmid=$hostBinding.Vmid; Domain=$config.Domain
+        Subscription=$config.SubscriptionId; Tenant=$config.TenantId
+        ArcId=($base + 'Microsoft.HybridCompute/machines/' + $hostBinding.Name)
+        LiveId=($base + 'Microsoft.DesktopVirtualization/hostPools/' + $config.LiveHostPool)
+        ReadyId=($base + 'Microsoft.DesktopVirtualization/hostPools/' + $config.ReadyHostPool)
+        Location=$config.Location
     }
 }
 
 function Assert-MmsLocal($Evidence, [switch]$AllowRegistered) {
     $target = Get-MmsTarget $Evidence.Name $Evidence.Uuid
-    if (-not $Evidence.PartOfDomain -or $Evidence.Domain -ne 'AD.Mauvlan.Net' -or -not $Evidence.SecureChannel) {
-        throw 'Expected AD.Mauvlan.Net domain membership and a working secure channel.'
+    if (-not $Evidence.PartOfDomain -or $Evidence.Domain -ne $target.Domain -or -not $Evidence.SecureChannel) {
+        throw 'Expected configured AD domain membership and a working secure channel.'
     }
     foreach ($pattern in @('(?im)^\s*AzureAdJoined\s*:\s*YES\s*$','(?im)^\s*DomainJoined\s*:\s*YES\s*$',('(?im)^\s*TenantId\s*:\s*' + [regex]::Escape($target.Tenant) + '\s*$'))) {
         if ($Evidence.JoinText -notmatch $pattern) { throw 'Guest hybrid join / tenant could not be verified with dsregcmd.' }

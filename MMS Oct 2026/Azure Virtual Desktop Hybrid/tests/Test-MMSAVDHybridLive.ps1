@@ -8,6 +8,8 @@ function Connect-AzAccount { throw 'OFFLINE GUARD: authentication forbidden' }
 function Get-CimInstance { throw 'OFFLINE GUARD: guest reads must be mocked' }
 function Get-AzContext { throw 'OFFLINE GUARD: Azure context reads must be mocked' }
 $source = Join-Path (Split-Path $PSScriptRoot -Parent) 'Invoke-MMSAVDHybridLive.ps1'
+. (Join-Path (Split-Path $PSScriptRoot -Parent) 'MmsAvdHybrid.Config.ps1')
+$script:MmsConfigPath = Join-Path $PSScriptRoot 'synthetic.config.json'
 $script:passed = 0
 function Assert($condition, $message) { if (-not $condition) { throw $message } }
 function Test($name, [scriptblock]$body) {
@@ -29,20 +31,20 @@ foreach ($node in $ast.FindAll({param($n) $n -is [System.Management.Automation.L
     . ([scriptblock]::Create($node.Extent.Text))
 }
 Test 'allowlist binds both Live hosts to UUID, refusing Ready and mismatches' {
-    $one = Get-MmsTarget 'MMS-AVDHYB-01' '81BCC02C-50E3-4ECF-8A86-D5180C42CC7B'
-    Assert ($one.Vmid -eq 122) 'Wrong VMID 122'
-    $two = Get-MmsTarget 'MMS-AVDHYB-02' '45DA37B2-1BE2-494D-9142-7B6FC78B564A'
-    Assert ($two.Vmid -eq 123) 'Wrong VMID 123'
-    Reject { Get-MmsTarget 'MMS-AVDHYB-03' '81BCC02C-50E3-4ECF-8A86-D5180C42CC7B' } 'allowlist'
-    Reject { Get-MmsTarget 'MMS-AVDHYB-01' '45DA37B2-1BE2-494D-9142-7B6FC78B564A' } 'UUID'
-    Reject { Get-MmsTarget 'MMS-AVDHYB-01' 'not-a-guid' } 'UUID'
+    $one = Get-MmsTarget 'DEMO-AVD-01' 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
+    Assert ($one.Vmid -eq 9001) 'Wrong VMID 9001'
+    $two = Get-MmsTarget 'DEMO-AVD-02' 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
+    Assert ($two.Vmid -eq 9002) 'Wrong VMID 9002'
+    Reject { Get-MmsTarget 'DEMO-AVD-03' 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1' } 'allowlist'
+    Reject { Get-MmsTarget 'DEMO-AVD-01' 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2' } 'UUID'
+    Reject { Get-MmsTarget 'DEMO-AVD-01' 'not-a-guid' } 'UUID'
 }
 function New-Evidence {
-    $target = Get-MmsTarget 'MMS-AVDHYB-01' '81BCC02C-50E3-4ECF-8A86-D5180C42CC7B'
+    $target = Get-MmsTarget 'DEMO-AVD-01' 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
     return [pscustomobject]@{
-        Name=$target.Name; Uuid=$target.Uuid; Domain='AD.Mauvlan.Net'; PartOfDomain=$true
+        Name=$target.Name; Uuid=$target.Uuid; Domain='ad.example.test'; PartOfDomain=$true
         SecureChannel=$true; JoinText="AzureAdJoined : YES`nDomainJoined : YES`nTenantId : $($target.Tenant)"
-        Arc=[pscustomobject]@{status='Connected';resourceId=$target.ArcId;vmId='ed3b26c1-c41c-4361-9514-e48717eede55';vmUuid=$target.Uuid;tenantId=$target.Tenant}
+        Arc=[pscustomobject]@{status='Connected';resourceId=$target.ArcId;vmId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1';vmUuid=$target.Uuid;tenantId=$target.Tenant}
         AvdPresent=$false
     }
 }
@@ -63,8 +65,8 @@ Test 'local preflight requires exact Arc identity, hybrid join and clean registr
 }
 Test 'local Arc machine has a generated vmId distinct from SMBIOS vmUuid' {
     $e = New-Evidence
-    $e.Arc.vmId = 'c0ab434e-63d7-446d-bad9-3b09b148073a'
-    Assert ((Assert-MmsLocal $e).Vmid -eq 122) 'Matching SMBIOS vmUuid should pass despite distinct Arc vmId'
+    $e.Arc.vmId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'
+    Assert ((Assert-MmsLocal $e).Vmid -eq 9001) 'Matching SMBIOS vmUuid should pass despite distinct Arc vmId'
     $e.Arc.vmUuid = 'not-the-smbios-uuid'
     Reject { Assert-MmsLocal $e } 'UUID'
 }
@@ -81,8 +83,8 @@ Test 'local collector reads CIM, secure channel, dsregcmd and Arc without writes
     # Only base directories for the mocked native adapter; no Windows drives needed.
     $env:ProgramFiles = $PSScriptRoot; $env:SystemRoot = $PSScriptRoot
     function Get-CimInstance { param($ClassName)
-        if ($ClassName -eq 'Win32_ComputerSystemProduct') { return @{UUID='81BCC02C-50E3-4ECF-8A86-D5180C42CC7B'} }
-        return @{Name='MMS-AVDHYB-01';Domain='AD.Mauvlan.Net';PartOfDomain=$true}
+        if ($ClassName -eq 'Win32_ComputerSystemProduct') { return @{UUID='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'} }
+        return @{Name='DEMO-AVD-01';Domain='ad.example.test';PartOfDomain=$true}
     }
     function Test-ComputerSecureChannel { $true }
     function Get-Service { @() }
@@ -92,7 +94,7 @@ Test 'local collector reads CIM, secure channel, dsregcmd and Arc without writes
         return (New-Evidence).JoinText
     }
     $e = Get-MmsLocalEvidence
-    Assert ((Assert-MmsLocal $e).Vmid -eq 122) 'Collector did not bind guest to target'
+    Assert ((Assert-MmsLocal $e).Vmid -eq 9001) 'Collector did not bind guest to target'
     function Get-Service { @{Name='RDAgentBootLoader'} }
     Assert ((Get-MmsLocalEvidence).AvdPresent) 'Installed AVD service not detected'
     function Get-Service { @() }
@@ -102,8 +104,8 @@ Test 'local collector reads CIM, secure channel, dsregcmd and Arc without writes
 Test 'WhatIf preview still reads the local secure channel instead of suppressing it' {
     $env:ProgramFiles = $PSScriptRoot; $env:SystemRoot = $PSScriptRoot
     function Get-CimInstance { param($ClassName)
-        if ($ClassName -eq 'Win32_ComputerSystemProduct') { return @{UUID='81BCC02C-50E3-4ECF-8A86-D5180C42CC7B'} }
-        return @{Name='MMS-AVDHYB-01';Domain='AD.Mauvlan.Net';PartOfDomain=$true}
+        if ($ClassName -eq 'Win32_ComputerSystemProduct') { return @{UUID='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'} }
+        return @{Name='DEMO-AVD-01';Domain='ad.example.test';PartOfDomain=$true}
     }
     function Get-Service { @() }
     function Test-Path { $false }
@@ -128,7 +130,7 @@ Test 'native read returns stdout and sanitizes failed command errors' {
     Reject { Read-MmsNative $exe @('-NoProfile','-Command','[Console]::Error.WriteLine("secret-must-not-escape"); exit 3') } '^Local read command failed\.$'
 }
 Test 'Azure context is process scoped and Status never initiates sign-in' {
-    $t = Get-MmsTarget 'MMS-AVDHYB-01' '81BCC02C-50E3-4ECF-8A86-D5180C42CC7B'
+    $t = Get-MmsTarget 'DEMO-AVD-01' 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
     $script:loginCount=0; $script:autosave=$false; $script:loginContext=$null
     function Import-Module { param($Name) }
     function Disable-AzContextAutosave { param($Scope) Assert ($Scope -eq 'Process') 'Autosave scope'; $script:autosave=$true }
@@ -171,19 +173,19 @@ Test 'collection reader follows pages but rejects foreign or looping nextLink' {
     Reject { Read-MmsCollection '/scope/list?api-version=x' @{} } 'loop'
 }
 function New-Cloud($t) {
-    return [pscustomobject]@{Machine=@{id=$t.ArcId;location=$t.Location;properties=@{vmId='ed3b26c1-c41c-4361-9514-e48717eede55';detectedProperties=@{vmuuidEsu=$t.Uuid};status='Connected'}};Extensions=@();LiveHosts=@();ReadyHosts=@()}
+    return [pscustomobject]@{Machine=@{id=$t.ArcId;location=$t.Location;properties=@{vmId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1';detectedProperties=@{vmuuidEsu=$t.Uuid};status='Connected'}};Extensions=@();LiveHosts=@();ReadyHosts=@()}
 }
 Test 'ARM machine has a generated vmId distinct from detected SMBIOS vmuuidEsu' {
-    $t = Get-MmsTarget 'MMS-AVDHYB-01' '81BCC02C-50E3-4ECF-8A86-D5180C42CC7B'
+    $t = Get-MmsTarget 'DEMO-AVD-01' 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
     $c = New-Cloud $t
-    $c.Machine.properties.vmId = 'c0ab434e-63d7-446d-bad9-3b09b148073a'
+    $c.Machine.properties.vmId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'
     $c.Machine.properties.detectedProperties = @{vmuuidEsu=$t.Uuid}
     Assert-MmsCloud $t $c
     $c.Machine.properties.detectedProperties.vmuuidEsu = 'not-the-smbios-uuid'
     Reject { Assert-MmsCloud $t $c } 'UUID'
 }
 Test 'cloud inventory reads exact subscription, machine and both pools' {
-    $t = Get-MmsTarget 'MMS-AVDHYB-01' '81BCC02C-50E3-4ECF-8A86-D5180C42CC7B'
+    $t = Get-MmsTarget 'DEMO-AVD-01' 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
     $script:paths=@()
     function Invoke-MmsArm { param($Method,$Path,$Context)
         Assert ($Method -eq 'GET') 'Inventory attempted a write'
@@ -200,7 +202,7 @@ Test 'cloud inventory reads exact subscription, machine and both pools' {
     Reject { Read-MmsCloud $t @{} } 'tenant|subscription'
 }
 Test 'cloud guard refuses UUID drift, existing extension and duplicate host by every identity' {
-    $t = Get-MmsTarget 'MMS-AVDHYB-01' '81BCC02C-50E3-4ECF-8A86-D5180C42CC7B'
+    $t = Get-MmsTarget 'DEMO-AVD-01' 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
     $c=New-Cloud $t; $c.Machine.properties.detectedProperties.vmuuidEsu='wrong'; Reject { Assert-MmsCloud $t $c } 'UUID'
     $c=New-Cloud $t; $c.Machine.properties.status='Disconnected'; Reject { Assert-MmsCloud $t $c } 'Connected'
     $c=New-Cloud $t; $c.Machine.id += '-03'; Reject { Assert-MmsCloud $t $c } 'resource'
@@ -209,7 +211,7 @@ Test 'cloud guard refuses UUID drift, existing extension and duplicate host by e
     $c=New-Cloud $t; $c.Extensions=@(@{name='renamed';properties=@{type='CloudDeviceExtension';publisher='Microsoft.AzureVirtualDesktop'}})
     Reject { Assert-MmsCloud $t $c } 'extension'
     foreach ($pool in @('LiveHosts','ReadyHosts')) {
-        foreach ($hostRecord in @(@{name='pool/MMS-AVDHYB-01.AD.Mauvlan.Net';properties=@{}},
+        foreach ($hostRecord in @(@{name='pool/DEMO-AVD-01.ad.example.test';properties=@{}},
             @{name='pool/other';properties=@{resourceId=$t.ArcId}},
             @{name='pool/other';properties=@{virtualMachineId=$t.Uuid}})) {
             $c=New-Cloud $t; $c.$pool=@($hostRecord)
@@ -217,7 +219,7 @@ Test 'cloud guard refuses UUID drift, existing extension and duplicate host by e
             Assert-MmsCloud $t $c -AllowRegistered
         }
     }
-    $c=New-Cloud $t; $c.LiveHosts=@(@{name='pool/MMS-AVDHYB-02.AD.Mauvlan.Net';properties=@{}})
+    $c=New-Cloud $t; $c.LiveHosts=@(@{name='pool/DEMO-AVD-02.ad.example.test';properties=@{}})
     Assert-MmsCloud $t $c # Host 01 may register after the independent host 02 starts.
 }
 Test 'Status emits only sanitized read-only cloud state after registration' {
@@ -232,7 +234,7 @@ Test 'Status emits only sanitized read-only cloud state after registration' {
     Assert (($result | ConvertTo-Json -Depth 10) -notmatch 'secret-must-not-escape') 'Status leaked secrets'
 }
 Test 'offline submission validates guards then uses only scoped PATCH POST PUT and one readback' {
-    $t=Get-MmsTarget 'MMS-AVDHYB-01' '81BCC02C-50E3-4ECF-8A86-D5180C42CC7B'
+    $t=Get-MmsTarget 'DEMO-AVD-01' 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
     $script:requests=@()
     function Get-MmsLocalEvidence { New-Evidence }
     function Read-MmsCloud { param($Target,$Context) New-Cloud $Target }
@@ -264,10 +266,10 @@ Test 'offline submission validates guards then uses only scoped PATCH POST PUT a
     Assert (@($script:requests | Where-Object { $_.Method -ne 'GET' -and $_.Path -match 'Ready' }).Count -eq 0) 'Write to Ready'
 }
 Test 'offline submission fails closed before writes and never PUTs a missing token' {
-    $t=Get-MmsTarget 'MMS-AVDHYB-01' '81BCC02C-50E3-4ECF-8A86-D5180C42CC7B'
+    $t=Get-MmsTarget 'DEMO-AVD-01' 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
     $script:writes=0
     function Get-MmsLocalEvidence { New-Evidence }
-    function Read-MmsCloud { param($Target,$Context) $c=New-Cloud $Target; $c.ReadyHosts=@(@{name='pool/MMS-AVDHYB-01.ad.mauvlan.net';properties=@{}}); return $c }
+    function Read-MmsCloud { param($Target,$Context) $c=New-Cloud $Target; $c.ReadyHosts=@(@{name='pool/DEMO-AVD-01.ad.example.test';properties=@{}}); return $c }
     function Invoke-MmsArm { $script:writes++; throw 'Should not write' }
     Reject { Submit-MmsRegistration $t @{} } 'already registered'
     Assert ($script:writes -eq 0) 'Preflight made a write'
@@ -286,27 +288,27 @@ Test 'script entrypoint is wired with safe default and explicit WhatIf propagati
     Assert ($text -notmatch '(?im)^\s*(Start-Transcript|Set-Content|Out-File|Export-Clixml|Save-AzContext)\b') 'Secret-persisting operation'
 }
 Test 'malformed extension inventory cannot establish safe absence' {
-    $t=Get-MmsTarget 'MMS-AVDHYB-01' '81BCC02C-50E3-4ECF-8A86-D5180C42CC7B'
+    $t=Get-MmsTarget 'DEMO-AVD-01' 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
     $c=New-Cloud $t; $c.Extensions=@(@{properties=@{}})
     Reject { Assert-MmsCloud $t $c } 'Malformed.*extension'
 }
 Test 'copy-identical host 02 plan uses its own binding and readback failures remain unconfirmed' {
     function Get-MmsLocalEvidence {
         $e=New-Evidence
-        $two=Get-MmsTarget 'MMS-AVDHYB-02' '45DA37B2-1BE2-494D-9142-7B6FC78B564A'
+        $two=Get-MmsTarget 'DEMO-AVD-02' 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
         $e.Name=$two.Name; $e.Uuid=$two.Uuid; $e.Arc.resourceId=$two.ArcId
-        $e.Arc.vmId='c0ab434e-63d7-446d-bad9-3b09b148073a'; $e.Arc.vmUuid=$two.Uuid
+        $e.Arc.vmId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2'; $e.Arc.vmUuid=$two.Uuid
         return $e
     }
     function Open-MmsAzure { throw 'Unexpected sign-in' }
     $plan=Invoke-MmsLive -Action Register -WhatIf
-    Assert ($plan.Machine -eq 'MMS-AVDHYB-02' -and $plan.Vmid -eq 123) 'Host 02 plan binding mismatch'
+    Assert ($plan.Machine -eq 'DEMO-AVD-02' -and $plan.Vmid -eq 9002) 'Host 02 plan binding mismatch'
     function Read-MmsCloud { param($Target,$Context) New-Cloud $Target }
     function Invoke-MmsArm { param($Method,$Path,$Context,$Payload)
         switch ($Method) {
             PATCH { return @{StatusCode=200;Content='{}'} }
             POST { return @{StatusCode=200;Content=(@{token='FAKE_OFFLINE_TOKEN';expirationTime=[DateTimeOffset]::UtcNow.AddHours(4).ToString('o')}|ConvertTo-Json)} }
-            PUT { Assert ($Path -match '/machines/MMS-AVDHYB-02/extensions/') 'Wrong host 02 PUT'; return @{StatusCode=202} }
+            PUT { Assert ($Path -match '/machines/DEMO-AVD-02/extensions/') 'Wrong host 02 PUT'; return @{StatusCode=202} }
             GET { throw 'Unavailable readback (offline)' }
         }
     }

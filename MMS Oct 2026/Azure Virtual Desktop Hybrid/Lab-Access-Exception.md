@@ -1,28 +1,29 @@
-# MMS AVD Hybrid demo lab — temporary access exception
+# Historical demo access exception — sanitized record
 
-> **Historical record for retired `HYBRID-DEMO-01/02/03` only.** Their AD, Entra and Arc identities were removed during the manual rebuild. The replacement `MMS-AVDHYB-01/02/03` (VMIDs 122–124) did **not** inherit this local-admin grant; do not run the revert below on them or claim that `AD\user2` is elevated there without a separate exact-host verification and authorization.
+A retired lab once granted a single demo principal direct membership in local
+Administrators on three explicitly scoped guests. This was an authorized,
+temporary elevation exception, **not** an AVD Hybrid prerequisite or a production
+baseline. Those retired identities are not the public template's sample hosts.
+No grant or removal is authorized by this document for any replacement environment.
 
-**Granted:** 2026-10-17 UTC
-**Purpose:** Allow demo user `AD\user2` to perform elevation steps on the three self-created AVD Hybrid demonstration hosts. This is **not** an AVD Hybrid prerequisite or a recommended production baseline.
-**Scope:** Local Administrators (`S-1-5-32-544`) on `HYBRID-DEMO-01`, `HYBRID-DEMO-02`, and `HYBRID-DEMO-03` only; direct member `AD\user2` (`S-1-5-21-931868896-1911896597-649028394-1645`). No domain-wide or Entra role was granted.
-**Verification:** Each host's local Administrators group was read back and showed exactly one direct member with this SID. The existing `AD\Domain Admins`, built-in Administrator, and local bootstrap admin entries were left untouched.
-**Expiry/owner:** Remove after the MMS demo; Adam to confirm when the elevation portion is finished. Until then, treat this as an explicit temporary exception. A user already signed in before the grant must fully sign out and back in to receive a new local-admin token; disconnect/reconnect does not suffice.
+Live hostnames, user/domain names and the principal's domain SID have been removed.
+The well-known local Administrators SID `S-1-5-32-544` is public Windows metadata,
+not a private identity. There is deliberately **no executable revert snippet**:
+without the original private approval and exact principal evidence, a generic
+removal could revoke the wrong account's access.
 
-## Revert on each named host
+## Reuse the process, not the historical grant
 
-Run elevated PowerShell on **each of the three exact hosts** (not on a domain controller):
+Keep a separate private exception record with approver, purpose, expiry, exact
+hostname **and** hardware UUID for each guest, the exact principal name/SID, direct
+membership evidence, and a rollback owner. Do not put that inventory in this repo.
 
-```powershell
-$expected = @('HYBRID-DEMO-01','HYBRID-DEMO-02','HYBRID-DEMO-03')
-if ($env:COMPUTERNAME -notin $expected) { throw 'Not an MMS AVD Hybrid demo host' }
-$group = Get-LocalGroup -SID 'S-1-5-32-544'
-$sid = 'S-1-5-21-931868896-1911896597-649028394-1645'
-$member = @(Get-LocalGroupMember -Group $group.Name | Where-Object { $_.SID.Value -eq $sid })
-if ($member.Count -ne 1 -or $member[0].Name -ne 'AD\user2') { throw 'Exact principal not present; inspect before removing anything' }
-Remove-LocalGroupMember -Group $group.Name -Member 'AD\user2'
-if (@(Get-LocalGroupMember -Group $group.Name | Where-Object { $_.SID.Value -eq $sid }).Count -ne 0) {
-    throw 'Membership still present; inspect host'
-}
-```
+For an authorized revert, on each independently verified exact guest (never by
+name pattern and never on a domain controller), resolve the local group by the
+well-known SID. Require exactly one direct member matching **both** the approved
+principal name and SID before removing only that member. Read the local SAM back
+and record the absence of that exact SID. Stop on any mismatch or ambiguous result;
+leave all other Administrators members untouched. Require a fresh sign-out/in when
+validating a changed elevation token; disconnect/reconnect does not refresh it.
 
-Do not remove by name pattern or touch any other Administrators member. Verify against the local SAM after removal, and update this exception record with the result.
+This sanitized record does not attest that any grant still exists or was revoked.

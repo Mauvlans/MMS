@@ -1,0 +1,3 @@
+# Private lab bindings and generated inventory reports
+*.private.json
+MMS-AVDHybrid-Status*.json
