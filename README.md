@@ -1,0 +1,23 @@
+# MMS session demos and reusable examples
+
+Presenter guides and sample code from MMS sessions. These are **examples**, not prebuilt production deployments. Work in a disposable lab, substitute your own configuration, read the safety gates, and test the exact code/OS version before using a sample. The live Event demo is managed separately from this repository.
+
+## Session index
+
+- **October 2026 — Session Host Update:** [historical runbook](MMS%20Oct%202026/Session%20Host%20Update/Session-Host-Update-Demo-Runbook.md), [individual stage scripts and queries](MMS%20Oct%202026/Session%20Host%20Update/demos/README.md), and [verified lab teardown](MMS%20Oct%202026/Session%20Host%20Update/Lab-Teardown.md). The original Azure lab **no longer exists**. The Python/PowerShell helpers require explicit subscription/tenant configuration and exact lab host-pool ownership; do not run a write action against an unrelated pool.
+- **October 2026 — AVD Hybrid:** [runbook](MMS%20Oct%202026/Azure%20Virtual%20Desktop%20Hybrid/AVD-Hybrid-Demo-Runbook.md) and guarded host scripts. Live registration, Arc onboarding, and a presenter status check are distinct paths. Configure your *own* lab targets before running a write; the example's former presenter-specific bindings are not a deployable service.
+- **October 2026 — Windows 365:** [Cloud Apps](MMS%20Oct%202026/Windows%20365%20Cloud%20Apps/MMS-Cloud-Apps-Demo-Runbook.md) and [Windows 365 for Agents](MMS%20Oct%202026/Windows%20365%20for%20Agents/MMS-W365-Agents-60min-Demo-Guide.md).
+- **October 2026 — Agentic Apps for ConfigMgr:** [runbook](MMS%20Oct%202026/Agentic%20Apps%20for%20ConfigMgr/MMS-Agentic-ConfigMgr-Demo-Runbook.md), [build-your-own Hermes dev team guide](MMS%20Oct%202026/Agentic%20Apps%20for%20ConfigMgr/Hermes-Dev-Team-Onboarding.md), and the [Beer Wheel Event app](MMS%20Oct%202026/Agentic%20Apps%20for%20ConfigMgr/Beer%20Wheel/README.md) with its own tests and deployment instructions.
+- **May 2024 / October 2021 — Assigned Access kiosks:** sample [2021 profile and scripts](MMS%20Oct%202021/), [2024 multi-app kiosk](MMS%20May%202024/MultiAppLockdown_MultiUser/), and [2024 single-app browser kiosk](MMS%20May%202024/SingleAppBrowser/). Run only in a disposable Windows VM. The 2024 `PrepScript.ps1` requires explicit opt-in because it stores a generated autologon password in plaintext in the Winlogon registry; disable/remove this lab configuration after testing. The [2024 slide deck](MMS%20May%202024/Secure%20Your%20Windows%20Kiosks%20and%20Workstations%20-%20Session.pptx) is viewable but **excluded from the reuse license** pending a separate rights review of images and collaboration metadata.
+
+## Third-party PsExec is not bundled
+
+Microsoft's [Sysinternals licensing FAQ](https://learn.microsoft.com/en-us/sysinternals/license-faq) does not permit third-party redistribution, even for free. If you choose to run an older Assigned Access `.cmd` launcher, [download PsTools from Microsoft](https://learn.microsoft.com/en-us/sysinternals/downloads/psexec), inspect the publisher/signature on Windows, accept Microsoft's license, and put **your own** `PsExec.exe` beside that `.cmd`. The launchers fail clearly if it is missing. They run PowerShell as **SYSTEM** and use `-ExecutionPolicy Bypass` only for the process; use an isolated machine and review the script first. They launch asynchronously, so a successful launcher return is **not** proof the Assigned Access configuration succeeded.
+
+## Configuration and licensing
+
+- Set intended lab IDs from your private deployment record; `.env.example` contains placeholders only. A `.env` file is ignored but **not automatically loaded**: export/source it in your shell or supply the named PowerShell parameters explicitly. Never set “expected” subscription IDs from the Azure CLI's *current* selection, which defeats the wrong-target check.
+- Do not commit credentials, device-code prompts, host inventories, Event PINs, attendee data, local recordings, or real `.env` files. Public examples may contain historical sample names and profile GUIDs, not permission to access anyone's tenant.
+- [License and exclusions](LICENSE.md): original code under MIT; original Markdown prose under CC BY 4.0. Microsoft utilities, third-party media, and the 2024 slide deck are **not** covered by those grants. See the relevant session guide for supported product versions and remaining manual readiness gates.
+
+This repository's public history predates the cleanup of current files. Removing a literal or binary from `main` does **not** remove old commits, PR diffs, caches, or copies; do not interpret a clean current checkout as proof that history is sanitized.
