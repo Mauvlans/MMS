@@ -2,9 +2,9 @@
 
 <#
 .SYNOPSIS
-Checks or manually connects only MMS-AVDHYB-04 to Azure Arc.
+Checks or manually connects only the configured ArcHost to Azure Arc.
 .DESCRIPTION
-Runs on the exact VMID 125 guest. Check is local/read-only. An explicit
+Runs on the exact configured hostname/SMBIOS guest. Check is local/read-only. An explicit
 Register action will use Microsoft's staged, signed MSI and a device-code sign-in.
 No AVD registration is performed by this script.
 .EXAMPLE
@@ -15,25 +15,29 @@ No AVD registration is performed by this script.
 .\Connect-MMSAVDHYB04Arc.ps1 -Action Register -Confirm
 #>
 [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='High')]
-param([ValidateSet('Check','Register')][string]$Action='Check')
+param([ValidateSet('Check','Register')][string]$Action='Check',
+    [string]$ConfigPath = $env:MMS_AVD_HYBRID_CONFIG)
+
+. (Join-Path $PSScriptRoot 'MmsAvdHybrid.Config.ps1')
+$script:MmsConfigPath = $ConfigPath
+$null = Get-MmsDemoConfig # Fail before any guest reads, authentication or writes.
 
 function Get-Arc04Target([string]$Name, [string]$Uuid) {
-    if ($Name -ne 'MMS-AVDHYB-04') { throw 'Hostname is not on the Arc onboarding allowlist.' }
-    if ($Uuid -ne '49563447-D6F9-44AA-B7A9-C240FF2D8C2F') { throw 'SMBIOS UUID does not match VMID 125.' }
-    $subscription='e6ab1306-dfc4-4975-9f15-1df30c4699e2'
-    $group='rg-MMS-AVDHybrid-UnderTheHood'
+    $config=Get-MmsDemoConfig
+    $h=$config.ArcHost
+    if ($Name -ne $h.Name) { throw 'Hostname is not on the Arc onboarding allowlist.' }
+    if ($Uuid -ne $h.Uuid) { throw 'SMBIOS UUID does not match the configured Arc host.' }
     return [pscustomobject]@{
-        Name=$Name;Uuid=$Uuid;Vmid=125;Subscription=$subscription
-        Tenant='280bf3c4-6674-481d-907a-2e873c775e72';ResourceGroup=$group;Location='westus3'
-        ArcId=('/subscriptions/'+$subscription+'/resourceGroups/'+$group+'/providers/Microsoft.HybridCompute/machines/'+$Name)
-        MsiPath='C:\Scripts\AzureConnectedMachineAgent.msi'
-        MsiSha256='5B7D70E913DFA73B9277F157A62955F0EB0917B00A10CAA76D424B78934A1319'
+        Name=$h.Name;Uuid=$h.Uuid;Vmid=$h.Vmid;Subscription=$config.SubscriptionId;Domain=$config.Domain
+        Tenant=$config.TenantId;ResourceGroup=$config.ResourceGroup;Location=$config.Location
+        ArcId=('/subscriptions/'+$config.SubscriptionId+'/resourceGroups/'+$config.ResourceGroup+'/providers/Microsoft.HybridCompute/machines/'+$h.Name)
+        MsiPath=$config.MsiPath;MsiSha256=$config.MsiSha256
     }
 }
 
 function Assert-Arc04Local($Evidence, $Target) {
     if ($Evidence.Name -ne $Target.Name -or $Evidence.Uuid -ne $Target.Uuid) { throw 'Guest hostname/UUID changed during preflight.' }
-    if (-not $Evidence.Joined -or $Evidence.Domain -ne 'AD.Mauvlan.Net' -or -not $Evidence.SecureChannel) {
+    if (-not $Evidence.Joined -or $Evidence.Domain -ne $Target.Domain -or -not $Evidence.SecureChannel) {
         throw 'Expected AD domain membership and a working secure channel.'
     }
     if ($Evidence.AzureAdJoined -ne 'YES' -or $Evidence.DomainJoined -ne 'YES' -or $Evidence.TenantId -ne $Target.Tenant) {
@@ -128,8 +132,9 @@ function Install-Arc04Agent($Target) {
         $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation' -or $hash.Hash -ne $Target.MsiSha256) {
         throw 'The staged Arc installer changed or cannot be trusted; nothing was installed.'
     }
-    $log='C:\Windows\Temp\MMS-Arc-125-install.log'
-    $process=Start-Process -FilePath 'msiexec.exe' -ArgumentList @('/i',$msi,'/qn','/norestart','/l*v',$log) -Wait -PassThru -ErrorAction Stop
+    $log='C:\Windows\Temp\MMS-Arc-install.log'
+    # Start-Process joins arguments; quote the validated path to preserve spaces.
+    $process=Start-Process -FilePath 'msiexec.exe' -ArgumentList @('/i',('"'+$msi+'"'),'/qn','/norestart','/l*v',$log) -Wait -PassThru -ErrorAction Stop
     if($process.ExitCode -eq 3010) { throw 'Arc MSI requires a reboot. No reboot was started; inspect the installer log and reboot deliberately before retrying.' }
     if($process.ExitCode -ne 0) { throw ('Arc MSI failed with exit code '+$process.ExitCode+'. Inspect '+$log) }
     $service=Get-Service -Name himds -ErrorAction Stop
@@ -155,7 +160,7 @@ function Connect-Arc04($Target) {
     $arguments=@('connect','--use-device-code','--subscription-id',$Target.Subscription,
         '--resource-group',$Target.ResourceGroup,'--location',$Target.Location,
         '--tenant-id',$Target.Tenant,'--cloud','AzureCloud','--resource-name',$Target.Name,
-        '--tags','session=MMS-AVDHybrid-UnderTheHood,vmid=125,onboarding=manual')
+        '--tags',('session=AVDHybrid-Demo,vmid='+$Target.Vmid+',onboarding=manual'))
     $code=Invoke-Arc04ConnectNative $exe $arguments
     if($code -ne 0) { throw ('Arc connect failed with exit code '+$code+'; inspect the host and Azure before retrying.') }
     $show=Read-Arc04Native $exe @('show','--json') | ConvertFrom-Json -ErrorAction Stop

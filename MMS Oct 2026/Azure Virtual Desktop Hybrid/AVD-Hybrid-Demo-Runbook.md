@@ -7,57 +7,103 @@ Presenters: Adam Nichols, Chris Cavazos · 5 demos · ~49 minutes of demo time i
 
 ---
 
-## 0. Lab build (do this before you travel)
+## 0. Prepare a private lab configuration
 
-**Current MMS lab:** subscription `e6ab1306-dfc4-4975-9f15-1df30c4699e2`, resource group `rg-MMS-AVDHybrid-UnderTheHood` in `westus3`. The **Live** pool is `hp-MMS-AVDHybrid-UnderTheHood`; the separate **Ready** pool is `hp-MMS-AVDHybrid-UnderTheHood-Ready`. Both use the existing `ws-MMS-AVDHybrid-UnderTheHood` workspace and their own desktop application groups. All three Windows 11 Enterprise single-session VMs run on `PRX-03` local NVMe, are joined to `AD.Mauvlan.Net` and hybrid Entra-joined, and are Azure Arc-connected. The Live pool stays empty until demos 3 and 4; only the Ready host is registered before the session. Arc-enabling is already done, so narrate that step rather than reconnecting a machine live.
+This is a **public template**, not a record of current infrastructure or readiness.
+`DEMO-AVD-01/02/03/04`, resource names and paths below are sample labels only.
+No tenant, subscription, guest address, SMBIOS UUID, VMID or installer hash is
+provided for a real environment. The synthetic fixture under `tests/` is for
+**offline tests only**; never use it for an Azure operation or readiness claim.
 
-| Machine / Proxmox VMID | Guest IPv4 | AVD plan |
+1. Copy `MmsAvdHybrid.config.example.json` to `MmsAvdHybrid.private.json` on a
+   trusted operator machine. `*.private.json` and status reports are ignored here;
+   preferably keep private bindings and generated inventories **outside the repo**.
+   Do not add credentials or registration tokens to this file.
+2. Fill in the actual `SubscriptionId`, `TenantId`, `Domain`, resource group, location,
+   Live/Ready pool names and all four exact host bindings (`Name`, hardware SMBIOS
+   `Uuid`, integer `Vmid`). Use the configured names consistently in this runbook.
+   Live requires two hosts; Ready and optional Arc onboarding have distinct names,
+   UUIDs and VMIDs. VMID is an operator label, not a substitute for hardware identity.
+3. Set `MsiPath` to a staged Microsoft-signed Azure Connected Machine Agent MSI and
+   `MsiSha256` to the independently reviewed hash of those exact bytes. Get the MSI
+   from Microsoft, verify its Authenticode signature and publisher, then calculate
+   `Get-FileHash -Algorithm SHA256`. Do not copy a published example digest as trust.
+4. Review the entire config before distributing it privately alongside both scripts
+   and `MmsAvdHybrid.Config.ps1`. Config is a trusted allowlist, not proof of authority:
+   replacing it intentionally retargets the demo. Restrict its write permissions.
+   The scripts reject missing/invalid config, duplicate identities and equal pools.
+5. In **each** guest/operator PowerShell process explicitly select that file:
+
+   ```powershell
+   $env:MMS_AVD_HYBRID_CONFIG = 'C:\Private\MmsAvdHybrid.private.json'
+   # Alternatively pass -ConfigPath to each script; JSON does not load itself.
+   ```
+
+Use supported Windows 11 Enterprise single-session guests on your chosen hypervisor,
+AD/hybrid joined to the configured tenant. Confirm licensing, endpoints and OS support
+against Microsoft documentation for your deployment. No disk placement, domain, guest
+address or hypervisor inventory is prescribed by this sample.
+
+| Config role | Sample host label | State before demos |
 |---|---|---|
-| `MMS-AVDHYB-01` / `122` | `10.0.10.217` | Arc-connected; **no AVD extension/registration** until live demo 3 |
-| `MMS-AVDHYB-02` / `123` | `10.0.10.223` | Arc-connected; **no AVD extension/registration** until scripted demo 4 |
-| `MMS-AVDHYB-03` / `124` | `10.0.10.250` | Pre-register in **Ready** and verify Available before the session; fallback desktop for demo 5 |
+| `LiveHosts[0]` | `DEMO-AVD-01` | Arc Connected, no AVD evidence |
+| `LiveHosts[1]` | `DEMO-AVD-02` | Arc Connected, no AVD evidence |
+| `ReadyHost` | `DEMO-AVD-03` | Ready pool, extension Succeeded, broker Available; test Windows App |
+| `ArcHost` | `DEMO-AVD-04` | Optional separate manual Arc onboarding only; not a Live target |
 
-The guests currently report Windows build `26300` and ConfigMgr client `5.00.9146.1027` assigned to site `MVN`. The boot/EFI/TPM disks are on `PRX-03-MVNE2-XFS`, **not `UNAS_PRO_8`**; the attached UNAS references are installer ISOs only. Never place a new runtime disk on `UNAS_PRO_8` without Adam's explicit approval. Build 26300 is not listed in [Microsoft's ConfigMgr Windows 11 client support matrix](https://learn.microsoft.com/en-us/intune/configmgr/core/plan-design/configs/support-for-windows-11); the agent's actual registration is verified, but that is not an official OS-support claim.
+Pre-stage distinct Live/Ready host pools, workspace/application groups, an attached
+managed identity with Reader on the Arc resource group, and approved user assignments.
+Do not create duplicate grants or reconnect an already-connected host. Install
+`Az.Accounts` on Live guests in advance; presenter status requires Azure CLI or
+Az.Accounts and Graph read permission. ConfigMgr and roaming profiles are **not**
+prerequisites. This demo uses local profiles; don't claim cross-host roaming.
 
-**Read-only preflight (2026-10-18):** `Show-MMSAVDHybridStatus.ps1 -Phase Staged` returned `PASS=9 READY=1 STAGED=4 FAIL=0 ERROR=0`. The Ready session host reported **Available**, zero sessions and a recent heartbeat; the Live pool was empty. This proves registration and broker status, **not** a successful Windows App sign-in or stable desktop. Complete that hands-on test before the presentation.
-
-**Staged on-host execution:** the same guarded `C:\Scripts\Invoke-MMSAVDHybridLive.ps1` is on `MMS-AVDHYB-01` (VMID 122) and `MMS-AVDHYB-02` (VMID 123) **only**. `MMS-AVDHYB-03` is already in Ready and must not run it. Start an elevated Windows PowerShell 5.1 session with a **process-only** execution-policy bypass (`powershell.exe -NoProfile -ExecutionPolicy Bypass`), then run `-Action Check` and `-Action Register -WhatIf` without signing in. Only `-Action Register -Confirm` begins the interactive device sign-in and Azure writes; perform that on stage, one host at a time. The script uses the preinstalled `Az.Accounts` module and stores no credential or registration token in the PS1. `-Action Status` is read-only and uses the same signed-in PowerShell process. The separate `Show-MMSAVDHybridStatus.ps1` remains a **presenter-side** status tool, not a guest registration script.
-
-**Optional fourth host — manual Arc onboarding only:** `MMS-AVDHYB-04` (VMID `125`, `10.0.10.170`) is domain/hybrid-joined but deliberately **not yet Arc-connected or AVD-registered**. It is outside the three-host Live/Ready demo plan. `C:\Scripts\Connect-MMSAVDHYB04Arc.ps1` and a Microsoft-signed `AzureConnectedMachineAgent.msi` are staged **only on `-04`**. The PS1 requires this exact hostname and SMBIOS UUID, verifies the pinned installer hash, and contains no credential. In an elevated, interactive Windows PowerShell 5.1 session on `-04`, use a process-only execution-policy bypass and run:
+Run elevated Windows PowerShell 5.1 on each exact Live guest:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass
-Set-Location C:\Scripts
-.\Connect-MMSAVDHYB04Arc.ps1 -Action Check
-.\Connect-MMSAVDHYB04Arc.ps1 -Action Register -WhatIf
-# Explicit manual step, when ready to create the Arc resource:
-.\Connect-MMSAVDHYB04Arc.ps1 -Action Register -Confirm
+.\Invoke-MMSAVDHybridLive.ps1 -Action Check
+.\Invoke-MMSAVDHybridLive.ps1 -Action Register -WhatIf
+# Human-only, explicitly authorized on-stage step:
+.\Invoke-MMSAVDHybridLive.ps1 -Action Register -Confirm
+.\Invoke-MMSAVDHybridLive.ps1 -Action Status
 ```
 
-`Check`/`-WhatIf` validate **local** prerequisites only; neither signs in or checks Azure. `Register -Confirm` installs the staged agent if needed and starts an interactive **device-code** sign-in for the exact `MMS-AVDHYB-04` Arc resource in this lab's subscription/RG/`westus3`. The operator needs Azure Arc onboarding permission on that scope and must complete sign-in themselves; never share a device code in chat. Verify the resulting exact resource in Azure Arc after the local `ConnectedLocal` response. This script does **not** add an AVD extension or assign `-04` to either host pool. Leave the separate Live-registration PS1 restricted to `-01/-02`.
+Check/WhatIf read only local prerequisites; **no** sign-in, cloud reads or writes.
+Register checks the authenticated tenant/subscription against ARM, the guest and
+Arc hardware identity, both pools and existing extensions before writing. Run
+sequentially: each Register rotates the **shared** Live pool token for four hours.
+Wait for the prior extension to consume it before rotating again. Tokens stay in
+memory and extension `protectedSettings`, never public settings or disk. Do not
+turn on step/HTTP tracing or inspect secret variables. Existing logging policies
+are outside this script's control. Accepted extension requests are not proof of
+registration, broker Available or functional user sign-in; use Status then test
+Windows App. Do not delete stale evidence or retry blindly to bypass a guard.
 
-**If Arc remains Disconnected:** starting a nested `powershell.exe` with `-ExecutionPolicy Bypass` does **not** elevate the parent shell. Open Windows PowerShell using **Run as administrator** before running `Register -Confirm`; the PS1 now checks this and stops before invoking the Arc CLI if the token is not elevated. A read-only check in that *same* window is `([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)` — it must return `True`. The only confirmation should concern the exact Arc resource, not CIM aliases or the local secure-channel probe. If the CLI still panics in an elevated console, stop rather than repeatedly retrying; inspect `%ProgramData%\AzureConnectedMachineAgent\Log\azcmagent.log` and its ACL and report the error without device codes or credentials.
+For the optional configured `ArcHost`, use `Connect-MMSAVDHYB04Arc.ps1` with the
+same Check → Register -WhatIf → Register -Confirm workflow. The retained filename
+is a demo label, **not** a fixed host binding. This installs the pinned/signed MSI
+if needed and manually connects only that hostname/UUID via device authentication;
+it does not register AVD or assign a pool. Verify the exact resource in Azure portal
+following local `ConnectedLocal`. A nested shell does not elevate: use **Run as
+administrator**. Never share device codes, tokens or passwords in chat. Stop and
+inspect agent logs/ACLs if connection fails; don't weaken guards or retry blindly.
 
-**Required in the lab before the session**
+Presenter-side read-only inventory (requires the same private config):
 
-- [ ] The **Live** standard pool still has **zero** session hosts; the **Ready** standard pool has exactly `MMS-AVDHYB-03.AD.Mauvlan.Net` reporting Available. Session Host Configuration is not an option for Hybrid pools.
-- [ ] A **workspace** and **application group**, with the app group added to the workspace.
-- [ ] A **managed identity** (system- or user-assigned) attached to the host pool on the **Identity** tab.
-- [ ] The existing managed identity's **Reader** assignment on the Arc resource group still exists; show it in demo 3, but don't create a duplicate grant.
-- [ ] `Az.DesktopVirtualization`, `Az.ConnectedMachine`, and `Az.ManagedServiceIdentity` PowerShell modules installed on the demo machine, or Cloud Shell ready.
-- [ ] `azcmagent show --json` reports Connected on **each** of VMIDs 122/123/124; confirm the exact Arc resource and matching VM UUID, not just an installer exit code.
-- [ ] Each guest reports a working AD secure channel, `DomainJoined: YES`, `AzureAdJoined: YES`, and an Entra `DeviceId` matching its synced AD computer GUID. Do not equate the presence of an Entra device object with completed guest join.
-- [ ] ConfigMgr (`MVN`, management point `MVN-MECM.AD.Mauvlan.Net`) shows each client active with the same GUID as the guest; this manages the lab machines but is not an AVD prerequisite.
-- [ ] **Local profiles** on each demo host for this session; do not depend on an FSLogix SMB share or claim profiles roam between hosts. Existing VHDX files are preserved outside the demo path for rollback.
-- [ ] **Microsoft.DesktopVirtualization** resource provider registered on the subscription.
-- [ ] **Desktop Virtualization Contributor** on you (or whoever drives the portal), and **User Access Administrator** if you'll assign users live.
-- [ ] Two endpoint checklists open in tabs: the [AVD required URLs](https://learn.microsoft.com/en-us/azure/virtual-desktop/required-fqdn-endpoint) list and the [Azure Arc network endpoints](https://learn.microsoft.com/en-us/azure/azure-arc/network-requirements-consolidated) list — these are **not the same list**, and mixing them up is the most common day-one failure.
-- [ ] Windows App installed and signed in on the machine you'll use for demo 5.
-- [ ] RDS CAL or the right M365/Windows Enterprise/VDA entitlement confirmed for whichever OS you're demoing, plus a spare AVD Hybrid service user license.
-- [ ] Azure portal, Azure Arc > Machines, and the host pool's Session hosts blade **pre-loaded in tabs**.
-- [ ] Screen recording of a full Arc-enable → extension succeeded → host Available cycle as a **fallback if venue Wi-Fi can't reach Azure**.
+```powershell
+.\Show-MMSAVDHybridStatus.ps1 -Phase Staged -NoLogin -JsonPath C:\Private\avd-status.json
+```
 
-**Timing reality check.** After the AVD Arc extension reports **Succeeded**, the host can take **up to 15 minutes** to show **Available** in the host pool. Kick off demo 3's registration early and let it run in the background while you talk through demo 4 and 5 — don't wait on stage.
+It checks tenant/subscription authority before inventory reads. Without `-NoLogin`
+it may prompt for device authentication. Reports contain private resource inventory:
+keep them out of source control. Fixture mode is explicitly offline and cannot prove
+live readiness. No previous lab's success counts apply to a new environment.
+
+Before the session confirm: Live empty; Ready exactly one expected Available host;
+working secure channels; guest `DomainJoined`/`AzureAdJoined` and tenant; Arc hardware
+UUID mapping (`vmUuid` / ARM `detectedProperties.vmuuidEsu`, not agent `vmId`); both
+endpoint lists; identity Reader grant; licensing; actual Windows App sign-in; fallback
+recording. Allow up to 15 minutes after extension Succeeded for broker Available.
 
 ---
 
@@ -66,11 +112,11 @@ Set-Location C:\Scripts
 **Point to make:** a Hybrid host pool looks almost empty on purpose — there's no VM-creation wizard because AVD never provisions the machine.
 
 1. Azure portal → **Azure Virtual Desktop** → **Host pools** → show the existing **Live** and **Ready** pooled/Standard host pools. Do not recreate them on stage; there is no Session Host Configuration for Hybrid.
-2. On **Identity**, show the existing user-assigned identity `id-MMS-AVDHybrid-UnderTheHood` on both pools; it reads the Arc resource group.
+2. On **Identity**, show the existing user-assigned identity `id-avd-demo` on both pools; it reads the Arc resource group.
 3. Explain that the pool did not create any of the three Proxmox VMs — their lifecycle is independent of AVD.
-4. Show the existing `ws-MMS-AVDHybrid-UnderTheHood` workspace and the two desktop application groups.
-5. Open **Session hosts**: **Live** should be empty; **Ready** should show `MMS-AVDHYB-03.AD.Mauvlan.Net`. Say: *"A Hybrid host pool is just a mailbox waiting for machines to register themselves — AVD doesn't create them."*
-6. In **Azure Arc → Machines**, show all three Connected. `MMS-AVDHYB-01/02` have no AVD extension yet; `MMS-AVDHYB-03` is the pre-staged Ready desktop. This sets up demo 3 without consuming its registration step.
+4. Show the existing `ws-avd-demo` workspace and the two desktop application groups.
+5. Open **Session hosts**: **Live** should be empty; **Ready** should show `DEMO-AVD-03.ad.example.test`. Say: *"A Hybrid host pool is just a mailbox waiting for machines to register themselves — AVD doesn't create them."*
+6. In **Azure Arc → Machines**, show all three Connected. `DEMO-AVD-01/02` have no AVD extension yet; `DEMO-AVD-03` is the pre-staged Ready desktop. This sets up demo 3 without consuming its registration step.
 
 **Talk track:** contrast this with a normal AVD host pool, where the wizard lets you size, image, and create VMs right there. Hybrid deliberately has none of that — the machine's whole lifecycle already happened before AVD ever heard about it.
 
@@ -80,7 +126,7 @@ Set-Location C:\Scripts
 
 **Point to make:** there are two separate endpoint lists and one role assignment — almost every real failure traces back to one of these three things.
 
-1. On `MMS-AVDHYB-01`, run the Arc connectivity check:
+1. On `DEMO-AVD-01`, run the Arc connectivity check:
    ```powershell
    azcmagent show
    azcmagent check
@@ -93,9 +139,11 @@ Set-Location C:\Scripts
    ```
 3. In the portal, open the host pool's managed identity → jump to the **Arc resource group → Access control (IAM) → Role assignments** and confirm **Reader** is present for that identity. If it's missing, add it live:
    ```powershell
-   $identity   = Get-AzUserAssignedIdentity -ResourceGroupName 'rg-MMS-AVDHybrid-UnderTheHood' -Name 'id-MMS-AVDHybrid-UnderTheHood'
+   $config = Get-Content -LiteralPath $env:MMS_AVD_HYBRID_CONFIG -Raw | ConvertFrom-Json
+   # Verify your selected Azure tenant/subscription before any manual RBAC change.
+   $identity   = Get-AzUserAssignedIdentity -ResourceGroupName $config.ResourceGroup -Name '<your-reviewed-managed-identity-name>'
    $principalId = $identity.PrincipalId # A user-assigned identity's principal, not the host pool's null system-assigned principal
-   New-AzRoleAssignment -ObjectId $principalId -RoleDefinitionName 'Reader' -ResourceGroupName 'rg-MMS-AVDHybrid-UnderTheHood'
+   New-AzRoleAssignment -ObjectId $principalId -RoleDefinitionName 'Reader' -ResourceGroupName $config.ResourceGroup
    ```
 4. Confirm the machine's join type is compliant for its OS: Windows Server must be AD DS or hybrid-joined (never Entra-only); Windows 10/11 can be Entra ID-joined, AD DS-joined, or hybrid-joined.
 
@@ -107,12 +155,12 @@ Set-Location C:\Scripts
 
 **Point to make:** this is the whole trick — Arc-enable, grant access, register, wait. Nothing here creates a VM.
 
-1. `MMS-AVDHYB-01` is already Arc-connected. Show `azcmagent show --json` and narrate the initial connection; **do not rerun `azcmagent connect` on the connected host**:
+1. `DEMO-AVD-01` is already Arc-connected. Show `azcmagent show --json` and narrate the initial connection; **do not rerun `azcmagent connect` on the connected host**:
    ```powershell
    azcmagent show --json
    ```
 2. In **Azure Arc → Machines**, show the machine already **Connected**; the live action is AVD registration, not Arc onboarding.
-3. On `MMS-AVDHYB-01`, preview the exact guest and Live pool before any Azure sign-in or registration-token rotation:
+3. On `DEMO-AVD-01`, preview the exact guest and Live pool before any Azure sign-in or registration-token rotation:
    ```powershell
    Set-Location C:\Scripts
    .\Invoke-MMSAVDHybridLive.ps1 -Action Check
@@ -122,13 +170,13 @@ Set-Location C:\Scripts
    ```powershell
    .\Invoke-MMSAVDHybridLive.ps1 -Action Register -Confirm
    ```
-5. In the portal, show `MMS-AVDHYB-01` → **Extensions** moving to Succeeded; use `.\Invoke-MMSAVDHybridLive.ps1 -Action Status` in the same PowerShell session to inspect progress. An accepted request is not a registered or usable desktop.
-6. Jump to the host pool's **Session hosts** blade and refresh. If `MMS-AVDHYB-01` isn't **Available** yet (it can take up to 15 minutes), switch to the **pre-staged** `MMS-AVDHYB-03` and show that one **Available** instead — be upfront that this is the same process, just further along.
+5. In the portal, show `DEMO-AVD-01` → **Extensions** moving to Succeeded; use `.\Invoke-MMSAVDHybridLive.ps1 -Action Status` in the same PowerShell session to inspect progress. An accepted request is not a registered or usable desktop.
+6. Jump to the host pool's **Session hosts** blade and refresh. If `DEMO-AVD-01` isn't **Available** yet (it can take up to 15 minutes), switch to the **pre-staged** `DEMO-AVD-03` and show that one **Available** instead — be upfront that this is the same process, just further along.
 7. Verify the test user's existing application-group assignment; add it only if absent. Have that user connect through Windows App to prove the loop closes.
 
 **Talk track while it runs:** nothing here provisions or images a VM — AVD only starts caring once a machine with the extension installed asks to register. Compare this explicitly to slide "Deploy in this order, or rebuild": provision & Arc-enable, create the control plane, grant access & register, assign & validate.
 
-**Leave `MMS-AVDHYB-01`'s registration running.** Check back on it during demo 5's wrap-up.
+**Leave `DEMO-AVD-01`'s registration running.** Check back on it during demo 5's wrap-up.
 
 ---
 
@@ -137,7 +185,7 @@ Set-Location C:\Scripts
 **Point to make:** the guarded on-host script performs the same control-plane registration with explicit checks and a protected token. Do not run the raw cmdlets from an older guide as well as this script.
 
 ```powershell
-Set-Location C:\Scripts   # on MMS-AVDHYB-02 only, in Windows PowerShell 5.1
+Set-Location C:\Scripts   # on DEMO-AVD-02 only, in Windows PowerShell 5.1
 .\Invoke-MMSAVDHybridLive.ps1 -Action Check
 .\Invoke-MMSAVDHybridLive.ps1 -Action Register -WhatIf
 # First let demo 3's extension finish using its token; rotating the shared Live token early can disrupt it.
@@ -151,7 +199,7 @@ Set-Location C:\Scripts   # on MMS-AVDHYB-02 only, in Windows PowerShell 5.1
 - The on-host script binds the Windows hostname and SMBIOS UUID to the exact Arc machine and **Live** pool, checks for existing AVD registration, and submits the extension once. Do not run it concurrently on both Live hosts: each explicit Register rotates a shared host-pool token.
 - `Az.Accounts` is already installed on both Live guests. The script needs an interactive operator with Azure write permissions; local Check/WhatIf need no Azure sign-in.
 - Nothing about the machine's OS image, size, or disk is visible here — because AVD Hybrid never touched any of that. Your provisioning tool owns it entirely.
-- Run this only against another deliberately staged **Live** machine. `MMS-AVDHYB-03` is already in **Ready**; do not re-run the Live registration snippet against it.
+- Run this only against another deliberately staged **Live** machine. `DEMO-AVD-03` is already in **Ready**; do not re-run the Live registration snippet against it.
 
 ---
 
@@ -164,7 +212,7 @@ Set-Location C:\Scripts   # on MMS-AVDHYB-02 only, in Windows PowerShell 5.1
 3. Open `powershell.exe` in the session and run `hostname` and `whoami` to show the Arc-enabled host and the signed-in demo user. No network profile container is involved.
 4. Disconnect and reconnect to the **same** Ready desktop to show the broker returns to that host and session. Do not narrate profile roaming across hosts; local desktop settings are scoped to that machine.
 5. **Optional stretch demo:** block UDP 3390 at the host's firewall, reconnect, and show Shortpath fail to negotiate and fall back to RDP over TCP — a good "what does it look like when it's broken" moment if time allows.
-6. Circle back to `MMS-AVDHYB-01` from demo 3 — by now its registration should have finished. Refresh the **Session hosts** blade one more time and show it landed on its own, no extra clicks.
+6. Circle back to `DEMO-AVD-01` from demo 3 — by now its registration should have finished. Refresh the **Session hosts** blade one more time and show it landed on its own, no extra clicks.
 
 **Talk track:** Hybrid keeps brokering, Windows App, and supported transport features in Azure; the machine, hypervisor, image, and profile strategy remain yours. This demo intentionally chooses local profiles, not FSLogix, so don't promise cross-host profile continuity.
 
@@ -194,3 +242,23 @@ Set-Location C:\Scripts   # on MMS-AVDHYB-02 only, in Windows PowerShell 5.1
 - Microsoft Learn — *Azure Arc-enabled servers overview and agent overview*
 - Microsoft Learn — *Azure Virtual Desktop required URLs* and *Azure Arc network requirements*
 - Microsoft Learn — *Licensing Azure Virtual Desktop*
+
+## Offline verification of this template
+
+From this directory, using PowerShell (no Az modules or cloud access required):
+
+```powershell
+pwsh -NoProfile -File ./tests/Test-MMSAVDHybridLive.ps1
+pwsh -NoProfile -File ./tests/Test-MMSAVDHYB04Arc.ps1
+pwsh -NoProfile -File ./tests/Test-MmsAvdHybridConfig.ps1
+```
+
+The fixture contains deliberately synthetic identities and a fake hash, **not** a
+usable installer pin. Tests cover exact-host/UUID rejection, domain/tenant checks,
+local-only Check/WhatIf, both-pool/extension write gates, protected token handling,
+installer signature/hash rechecks, config failures and read-only status authority.
+These are offline tests, not Windows guest execution or an Azure integration test.
+PowerShell 5.1 syntax analysis is not the same as running Windows PowerShell 5.1.
+A cleanup commit removes bindings from the current tree only; older commits, PRs,
+caches or copies can still contain previously published inventory. No history
+rewrite, credential rotation or infrastructure cleanup is performed by this template.

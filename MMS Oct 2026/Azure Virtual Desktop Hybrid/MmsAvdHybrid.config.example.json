@@ -1,0 +1,33 @@
+{
+  "SubscriptionId": "",
+  "TenantId": "",
+  "Domain": "",
+  "ResourceGroup": "rg-avd-demo",
+  "LiveHostPool": "hp-avd-demo-live",
+  "ReadyHostPool": "hp-avd-demo-ready",
+  "Location": "westus3",
+  "LiveHosts": [
+    {
+      "Name": "DEMO-AVD-01",
+      "Uuid": "",
+      "Vmid": 0
+    },
+    {
+      "Name": "DEMO-AVD-02",
+      "Uuid": "",
+      "Vmid": 0
+    }
+  ],
+  "ReadyHost": {
+    "Name": "DEMO-AVD-03",
+    "Uuid": "",
+    "Vmid": 0
+  },
+  "ArcHost": {
+    "Name": "DEMO-AVD-04",
+    "Uuid": "",
+    "Vmid": 0
+  },
+  "MsiPath": "C:\\Scripts\\AzureConnectedMachineAgent.msi",
+  "MsiSha256": ""
+}

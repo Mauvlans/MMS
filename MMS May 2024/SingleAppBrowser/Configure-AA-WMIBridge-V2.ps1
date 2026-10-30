@@ -1,4 +1,12 @@
-﻿$scriptpath = $MyInvocation.MyCommand.Path
+﻿param([string]$KioskUrl = $env:MMS_KIOSK_URL)
+$ErrorActionPreference = 'Stop'
+$parsedUrl = $null
+if (-not [uri]::TryCreate($KioskUrl, [UriKind]::Absolute, [ref]$parsedUrl) -or
+    $parsedUrl.Scheme -ne 'https' -or -not $parsedUrl.Host) {
+    throw 'Set -KioskUrl to your own absolute HTTPS URL before applying this sample.'
+}
+$safeUrl = [System.Security.SecurityElement]::Escape($parsedUrl.AbsoluteUri)
+$scriptpath = $MyInvocation.MyCommand.Path
 $dir = Split-Path $scriptpath
 
 $assignedAccessConfiguration = @"
@@ -6,7 +14,7 @@ $assignedAccessConfiguration = @"
 <AssignedAccessConfiguration xmlns="http://schemas.microsoft.com/AssignedAccess/2017/config" xmlns:rs5="http://schemas.microsoft.com/AssignedAccess/201810/config" xmlns:v4="http://schemas.microsoft.com/AssignedAccess/2021/config">
   <Profiles>
     <Profile Id="{EDB3036B-780D-487D-A375-69369D8A8F78}">
-      <KioskModeApp v4:ClassicAppPath="%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" v4:ClassicAppArguments="--kiosk https://mms2024atmoa.sched.com/ --edge-kiosk-type=fullscreen --kiosk-idle-timeout-minutes=2" />
+      <KioskModeApp v4:ClassicAppPath="%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" v4:ClassicAppArguments="--kiosk $safeUrl --edge-kiosk-type=fullscreen --kiosk-idle-timeout-minutes=2" />
       <v4:BreakoutSequence Key="Ctrl+A" />
     </Profile>
   </Profiles>
