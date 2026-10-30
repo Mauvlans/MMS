@@ -9,3 +9,6 @@
 __pycache__/
 *.py[cod]
 *.log
+
+# Download Microsoft's PsExec directly; do not redistribute it in this repository.
+**/PsExec.exe
